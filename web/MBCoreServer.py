@@ -1994,7 +1994,7 @@ def api_bans():
     """List all banned IPs"""
     try:
         cmd = config.get_cli_command() + ['listbanned']
-        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             bans = json.loads(r.stdout)
@@ -2010,7 +2010,7 @@ def api_bans_clear():
     """Clear all bans"""
     try:
         cmd = config.get_cli_command() + ['clearbanned']
-        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True}
