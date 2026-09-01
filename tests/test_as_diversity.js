@@ -4,7 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const vm = require('vm');
 
-let source = fs.readFileSync('bitcoin_peer_map/static/js/as-diversity.js', 'utf8');
+let source = fs.readFileSync('src/bitcoin_peer_map/static/js/as-diversity.js', 'utf8');
 const marker = '    return {';
 const markerPosition = source.lastIndexOf(marker);
 assert.notStrictEqual(markerPosition, -1, 'module return marker not found');

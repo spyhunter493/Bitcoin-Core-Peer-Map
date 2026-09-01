@@ -1,3 +1,5 @@
+Unreleased - Reworked Bitcoin Peer Map as a Docker-first application. Replaced the native shell launcher, host detection, generated Bitcoin configuration, bitcoin-cli subprocesses, and in-container virtualenv with a src-layout Python package, direct JSON-RPC client, typed environment settings, JSON preferences, FastAPI lifespan services, domain routers, and a hardened non-root container.
+
 Unreleased - Rebranded internals for Bitcoin Peer Map. Renamed the native launcher, Python package, frontend assets, configuration keys, browser storage, Docker service, image, user, paths, and persistent volume. This is a clean break from the previous internal naming and starts with fresh application data.
 
 v7.8.1 — README.md minor edit

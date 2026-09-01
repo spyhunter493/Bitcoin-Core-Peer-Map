@@ -1277,7 +1277,7 @@
             if (stats.path) html += `<div class="modal-row"><span class="modal-label" title="File system path to the database">Path</span><span class="modal-val" style="font-size:9px;max-width:260px" title="${stats.path}">${stats.path}</span></div>`;
             const alVal = stats.auto_lookup ? 'On' : 'Off';
             html += mrow('Auto-resolve', alVal, 'Master switch — enables the GeoIP system that resolves peer IPs to locations on the map', alVal, stats.auto_lookup ? 'modal-val-ok' : 'modal-val-warn');
-            // Auto-update toggle switch (persists to config.conf, syncs with terminal menu)
+            // Auto-update toggle switch (persists to settings.json)
             const auOn = !!stats.auto_update;
             html += `<div class="modal-row"><span class="modal-label" title="Automatically update the geolocation database (at startup and once per hour while the map is open)">Auto-update</span><span class="modal-val" style="display:flex;align-items:center;gap:6px"><label class="geodb-toggle" title="${auOn ? 'Click to disable auto-update' : 'Click to enable auto-update'}"><input type="checkbox" id="geodb-autoupdate-toggle" ${auOn ? 'checked' : ''}><span class="geodb-toggle-slider"></span></label></span></div>`;
             // API Lookup toggle switch (no On/Off text — slider colour shows state)
@@ -1288,7 +1288,7 @@
             html += '<div class="geodb-result" id="geodb-result"></div>';
             body.innerHTML = html;
 
-            // Auto-update toggle handler (persists to config.conf)
+            // Auto-update toggle handler (persists to settings.json)
             document.getElementById('geodb-autoupdate-toggle').addEventListener('change', async () => {
                 try {
                     const resp = await fetch('/api/geodb/toggle-auto-update', { method: 'POST' });
@@ -1342,14 +1342,10 @@
     // CONNECT PEER MODAL
     // ═══════════════════════════════════════════════════════════
 
-    // Cache the CLI base command from backend (fetched once)
-    let cliBaseCommand = 'bitcoin-cli';
-
     function openConnectPeerModal() {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.id = 'connect-peer-modal';
-        const defaultCmd = `${cliBaseCommand} addnode <address> add`;
         overlay.innerHTML = `<div class="modal-box" style="max-width:520px">
             <div class="modal-header"><span class="modal-title">Connect Peer</span><button class="modal-close" id="connect-close">&times;</button></div>
             <div class="modal-body">
@@ -1364,7 +1360,7 @@
                     <button class="connect-btn" id="connect-go-btn">Connect</button>
                 </div>
                 <div class="connect-result" id="connect-result"></div>
-                <div class="connect-cli-hint">For a permanent connection, use:<div class="connect-cli-cmd" id="connect-cli-cmd"><span>${defaultCmd}</span><span class="connect-copy-note">(copy and paste to terminal)</span></div></div>
+                <div class="connect-permanent-hint">For a permanent connection, add the peer to the Bitcoin node's <code>addnode</code> configuration.</div>
             </div>
         </div>`;
         document.body.appendChild(overlay);
@@ -1374,22 +1370,6 @@
         const input = document.getElementById('connect-addr-input');
         const goBtn = document.getElementById('connect-go-btn');
         const resultEl = document.getElementById('connect-result');
-        const cliCmd = document.getElementById('connect-cli-cmd');
-
-        // Fetch actual CLI base command from backend
-        fetch('/api/cli-info').then(r => r.json()).then(data => {
-            if (data.base_command) {
-                cliBaseCommand = data.base_command;
-                const cmdSpan = cliCmd.querySelector('span');
-                const addr = input.value.trim();
-                if (cmdSpan) {
-                    cmdSpan.textContent = addr
-                        ? `${cliBaseCommand} addnode "${addr}" add`
-                        : `${cliBaseCommand} addnode <address> add`;
-                }
-            }
-        }).catch(() => {});
-
         goBtn.addEventListener('click', async () => {
             const addr = input.value.trim();
             if (!addr) { resultEl.textContent = 'Please enter an address'; resultEl.className = 'connect-result err'; return; }
@@ -1401,7 +1381,6 @@
                 if (data.success) {
                     resultEl.textContent = `Connection attempt sent to ${data.address}`;
                     resultEl.className = 'connect-result ok';
-                    cliCmd.querySelector('span').textContent = `${cliBaseCommand} addnode "${data.address}" add`;
                     setTimeout(fetchPeers, 2000);
                 } else {
                     resultEl.textContent = data.error || 'Failed';
@@ -1415,16 +1394,6 @@
 
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') goBtn.click(); });
 
-        // Auto-populate CLI command hint as user types
-        input.addEventListener('input', () => {
-            const addr = input.value.trim();
-            const cmdSpan = cliCmd.querySelector('span');
-            if (cmdSpan) {
-                cmdSpan.textContent = addr
-                    ? `${cliBaseCommand} addnode "${addr}" add`
-                    : `${cliBaseCommand} addnode <address> add`;
-            }
-        });
     }
 
     // Connect Peer button handler
@@ -4217,7 +4186,7 @@
                 if (data.changes) {
                     tip += '<div class="update-tooltip-changes">' + data.changes.replace(/\n/g, '<br>') + '</div>';
                 }
-                tip += '<div class="update-tooltip-restart">To update: close this browser tab, press Ctrl+C in the terminal, then re-run <b>./bpm.sh</b></div>';
+                tip += '<div class="update-tooltip-restart">To update: rebuild the image and recreate the container with <b>docker compose up -d --build</b>.</div>';
                 tip += '</div>';
                 updateBadge.innerHTML = 'SYS UPDATE AVAILABLE!' + tip;
 
@@ -4258,9 +4227,8 @@
                     '<div class="update-modal-instructions">' +
                         'A new version is available. To upgrade:' +
                     '</div>' +
-                    '<div class="update-modal-step"><span class="update-modal-step-num">1.</span> Stop the program in terminal (<b>Ctrl+C</b>)</div>' +
-                    '<div class="update-modal-step"><span class="update-modal-step-num">2.</span> Re-run <b>./bpm.sh</b></div>' +
-                    '<div class="update-modal-step"><span class="update-modal-step-num">3.</span> Follow the prompts to upgrade</div>' +
+                    '<div class="update-modal-step"><span class="update-modal-step-num">1.</span> Pull the latest repository changes</div>' +
+                    '<div class="update-modal-step"><span class="update-modal-step-num">2.</span> Run <b>docker compose up -d --build</b></div>' +
                     changesHtml +
                     '<button class="update-modal-dismiss" id="update-modal-dismiss">Got It</button>' +
                 '</div>' +

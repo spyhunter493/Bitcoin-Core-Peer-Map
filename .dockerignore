@@ -1,20 +1,17 @@
 .git
 .github
 
-venv/
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
 .pytest_cache/
-pytest.ini
-requirements-test.txt
-tests/
+.ruff_cache/
+*.egg-info/
 
-data/*
-!data/.gitignore
+tests/
+docs/
 
 .env
-docker-compose.override.yml
 compose.override.yaml
+docker-compose.override.yml
 
 .DS_Store
