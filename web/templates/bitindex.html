@@ -12,7 +12,7 @@
     <!-- Top bar -->
     <header id="topbar">
         <div class="topbar-left">
-            <a href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map" target="_blank" rel="noopener" class="logo" title="Peer map, service provider diversity analysis, and tools for Bitcoin Core — View on GitHub"><span class="logo-m">M</span><span class="logo-b">&#x20bf;</span><span class="logo-core">Core</span> <span class="logo-dash">Dashboard</span></a>
+            <a href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map" target="_blank" rel="noopener" class="logo" title="Peer map, service provider diversity analysis, and tools for Bitcoin node — View on GitHub"><span class="logo-m">Bitcoin</span> <span class="logo-core">Peer Map</span></a>
             <a href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map" target="_blank" rel="noopener" class="version" title="View on GitHub">v{{ version }}</a>
         </div>
         <!-- [AS-DIVERSITY] Flight deck moved to topbar center -->
@@ -57,7 +57,7 @@
             <span class="topbar-status-msg" id="mo-status-msg" title="Peer geolocation progress">Loading...</span>
             <span class="topbar-dots" title="Internet &amp; service status">
                 <span class="internet-dot green" id="internet-dot" title="Internet connection status"></span>
-                <span class="status-dot" id="status-dot" title="MBCore dashboard service status"></span>
+                <span class="status-dot" id="status-dot" title="Bitcoin Peer Map service status"></span>
             </span>
             <span class="topbar-sync-status" id="mo-status" title="Node sync status">&mdash;</span>
             <span id="clock" class="topbar-clock" title="Current local time"></span>
@@ -204,7 +204,7 @@
                 <button class="handle-btn handle-btn-green" id="btn-connect-peer" title="Connect to a peer">Connect Peer</button>
                 <button class="handle-btn handle-btn-warn" id="btn-bans" title="View and manage banned peers">Banned Peers</button>
                 <button class="handle-btn handle-btn-accent" id="btn-node-info-peer" title="View detailed node information">NODE-INFO</button>
-                <button class="handle-btn handle-btn-accent" id="btn-mbcore-db-peer" title="MBCore geolocation database info and updates">MBCORE-DB</button>
+                <button class="handle-btn handle-btn-accent" id="btn-mbcore-db-peer" title="GeoIP database info and updates">GEOIP-DB</button>
                 <button class="handle-btn handle-btn-dim" id="btn-autofit" title="Automatic column size to fit">FIT</button>
                 <button class="handle-btn handle-btn-dim" id="btn-minimize" title="Toggle peer list table">&#9660;</button>
                 <button class="handle-btn handle-btn-dim" id="btn-table-settings" title="Table settings: columns, transparency">&#9881;</button>
@@ -243,7 +243,7 @@
     <!-- Footer -->
     <footer id="footer" class="footer">
         <span class="footer-btc" id="footer-btc">Support (btc): <span class="footer-btc-addr">bc1qy63057zemrskq0n02avq9egce4cpuuenm5ztf5</span></span>
-        <span class="footer-author">Created by <a class="footer-link" href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map" target="_blank" rel="noopener" title="Visit mbhillrn MBCore repository: GitHub">@mbhillrn</a></span>
+        <span class="footer-author">Created by <a class="footer-link" href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map" target="_blank" rel="noopener" title="Visit mbhillrn Bitcoin Peer Map repository: GitHub">@mbhillrn</a></span>
     </footer>
 
     <script src="/static/js/as-diversity.js?v={{ cache_bust }}"></script><!-- [AS-DIVERSITY] loaded before bitapp -->
