@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════════
-#  MBTC-DASH - Bitcoin Core Dashboard
-#  A monitoring and management interface for Bitcoin Core
+#  MBTC-DASH - Bitcoin Peer Map
+#  A monitoring and management interface for Bitcoin node
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set -e
@@ -74,17 +74,8 @@ show_banner() {
         clear
     fi
     echo ""
-    echo -e "${T_PRIMARY}"
-    cat << 'EOF'
-███╗   ███╗██████╗  ██████╗ ██████╗ ██████╗ ███████╗
-████╗ ████║██╔══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝
-██╔████╔██║██████╔╝██║     ██║   ██║██████╔╝█████╗
-██║╚██╔╝██║██╔══██╗██║     ██║   ██║██╔══██╗██╔══╝
-██║ ╚═╝ ██║██████╔╝╚██████╗╚██████╔╝██║  ██║███████╗
-╚═╝     ╚═╝╚═════╝  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝
-EOF
-    echo -e "${RST}"
-    echo -e "  ${T_WHITE}Dashboard${RST}  ${T_DIM}v${VERSION}${RST} ${T_WHITE}(Bitcoin Core peer info/map/tools)${RST}"
+    echo -e "${T_PRIMARY}${BOLD}  Bitcoin Peer Map${RST}"
+    echo -e "  ${T_WHITE}Dashboard${RST}  ${T_DIM}v${VERSION}${RST} ${T_WHITE}(Bitcoin node peer info/map/tools)${RST}"
     echo -e "  ────────────────────────────────────────────────────"
     echo -e "  ${T_DIM}Created by mbhillrn${RST}"
     echo -e "  ${T_DIM}MIT License - Free to use, modify, and distribute${RST}"
@@ -118,10 +109,10 @@ show_status() {
         # Quick RPC test
         if test_rpc 2>/dev/null; then
             echo ""
-            msg_ok "Bitcoin Core is running and responding"
+            msg_ok "Bitcoin node is running and responding"
         else
             echo ""
-            msg_warn "Bitcoin Core not responding (is bitcoind running?)"
+            msg_warn "Bitcoin node not responding (is bitcoind running?)"
         fi
     else
         msg_warn "Not configured - run detection first"
@@ -137,10 +128,10 @@ show_menu() {
     echo ""
     echo -e "${T_SECONDARY}${BOLD}Main Menu${RST}"
     echo ""
-    echo -e "  ${T_INFO}1)${RST} Enter MBCore Web Dashboard"
-    echo -e "     ${T_DIM}- Bitcoin Core peer info/map/tools${RST}"
+    echo -e "  ${T_INFO}1)${RST} Enter Bitcoin Peer Map"
+    echo -e "     ${T_DIM}- Bitcoin node peer info/map/tools${RST}"
     echo -e "     ${T_DIM}- Instructions on access viewable on the next page!${RST}"
-    echo -e "  ${T_INFO}2)${RST} Reset MBCore Config"
+    echo -e "  ${T_INFO}2)${RST} Reset Bitcoin Peer Map Config"
     echo -e "     ${T_DIM}- Clear saved configuration${RST}"
     echo -e "  ${T_INFO}3)${RST} Firewall Helper"
     echo -e "     ${T_DIM}- Configure firewall for network access${RST}"
@@ -148,7 +139,7 @@ show_menu() {
     echo -e "  ${T_DIM}─────────────────────────────────────────────────────────────${RST}"
     echo ""
     echo -e "  ${T_SECONDARY}g)${RST} Geo/IP Database     ${T_DIM}- Configure IP location database${RST}"
-    echo -e "  ${T_SECONDARY}m)${RST} Manual Settings     ${T_DIM}- Manually enter Bitcoin Core settings${RST}"
+    echo -e "  ${T_SECONDARY}m)${RST} Manual Settings     ${T_DIM}- Manually enter Bitcoin node settings${RST}"
     echo -e "  ${T_SECONDARY}n)${RST} Network/Port        ${T_DIM}- Server security and port settings${RST}"
     if [[ "$UPDATE_AVAILABLE" -eq 1 ]]; then
         echo -e "  ${T_WARN}u)${RST} Update              ${T_DIM}- Update to v${LATEST_VERSION}${RST}"
@@ -160,7 +151,7 @@ show_menu() {
 
 run_web_dashboard() {
     if [[ "$MBTC_CONFIGURED" -ne 1 ]]; then
-        msg_err "Bitcoin Core not configured. Run detection first."
+        msg_err "Bitcoin node not configured. Run detection first."
         echo ""
         echo -en "${T_DIM}Press Enter to continue...${RST}"
         read -r
@@ -241,7 +232,7 @@ run_manual_config() {
     echo ""
     echo -e "${T_SECONDARY}${BOLD}Manual Configuration${RST}"
     echo ""
-    echo -e "${T_DIM}Enter the paths to your Bitcoin Core configuration.${RST}"
+    echo -e "${T_DIM}Enter the paths to your Bitcoin node configuration.${RST}"
     echo -e "${T_DIM}(After entering these, the rest will be auto-detected)${RST}"
     echo -e "${T_DIM}(You may enter * to go back to detection, or just press Enter to use the example path)${RST}"
     echo ""
@@ -308,7 +299,7 @@ run_manual_config() {
         local default_datadir="$conf_dir"
 
         while true; do
-            echo -en "${T_INFO}Location of Bitcoin Core data directory${RST} ${T_DIM}(ex: ${default_datadir}):${RST} "
+            echo -en "${T_INFO}Location of Bitcoin node data directory${RST} ${T_DIM}(ex: ${default_datadir}):${RST} "
             read -r datadir
 
             # Handle * to go back
@@ -914,7 +905,7 @@ firewall_helper() {
     echo -e "${T_SECONDARY}${BOLD}Firewall Helper${RST}"
     echo ""
     echo -e "${T_DIM}This tool helps you configure your firewall to allow network access${RST}"
-    echo -e "${T_DIM}to the MBCore Dashboard from other computers on your local network.${RST}"
+    echo -e "${T_DIM}to the Bitcoin Peer Map from other computers on your local network.${RST}"
     echo ""
 
     # Get network info
@@ -1243,7 +1234,7 @@ show_update_banner() {
 
 run_update() {
     echo ""
-    echo -e "${T_SECONDARY}${BOLD}Updating MBCore Dashboard...${RST}"
+    echo -e "${T_SECONDARY}${BOLD}Updating Bitcoin Peer Map...${RST}"
     echo ""
 
     # Check if we're in a git repo
@@ -1322,7 +1313,7 @@ main() {
     # Check if config exists — first boot auto-detects without prompts
     if [[ "$MBTC_CONFIGURED" -ne 1 ]]; then
         echo ""
-        msg_info "No MBCore configuration found. Running Bitcoin Core detection..."
+        msg_info "No Bitcoin Peer Map configuration found. Running Bitcoin node detection..."
         sleep 1
         export MBTC_AUTO_DETECT=1
         run_detection
@@ -1330,7 +1321,7 @@ main() {
         load_config 2>/dev/null || true
         if [[ "$MBTC_CONFIGURED" -ne 1 ]]; then
             echo ""
-            msg_warn "Detection could not fully configure Bitcoin Core."
+            msg_warn "Detection could not fully configure Bitcoin node."
             msg_info "Use ${T_SECONDARY}m) Manual Settings${RST} from the main menu to enter paths manually."
             sleep 2
         fi
