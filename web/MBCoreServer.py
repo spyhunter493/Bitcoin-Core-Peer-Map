@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 MBTC-DASH - FastAPI Web Server
-Local web dashboard for Bitcoin Core peer monitoring
+Local web dashboard for Bitcoin peer monitoring and management
 
 Features:
 - Fixed port 58333 (or manual selection if blocked)
@@ -2403,19 +2403,14 @@ def main():
 
     # Print access info with colors and formatting
     line_w = 84
-    logo_w = 52  # Width of MBCORE ASCII art
+    logo_w = 52
     url_local = f"http://127.0.0.1:{port}"
     url_lan = f"http://{lan_ip}:{port}"
 
     print("")
     print(f"{C_BLUE}{'═' * line_w}{C_RESET}")
-    print(f"  {C_BOLD}{C_BLUE}███╗   ███╗██████╗  ██████╗ ██████╗ ██████╗ ███████╗{C_RESET}")
-    print(f"  {C_BOLD}{C_BLUE}████╗ ████║██╔══██╗██╔════╝██╔═══██╗██╔══██╗██╔════╝{C_RESET}")
-    print(f"  {C_BOLD}{C_BLUE}██╔████╔██║██████╔╝██║     ██║   ██║██████╔╝█████╗  {C_RESET}")
-    print(f"  {C_BOLD}{C_BLUE}██║╚██╔╝██║██╔══██╗██║     ██║   ██║██╔══██╗██╔══╝  {C_RESET}")
-    print(f"  {C_BOLD}{C_BLUE}██║ ╚═╝ ██║██████╔╝╚██████╗╚██████╔╝██║  ██║███████╗{C_RESET}")
-    print(f"  {C_BOLD}{C_BLUE}╚═╝     ╚═╝╚═════╝  ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝{C_RESET}")
-    print(f"  Dashboard v{VERSION} {C_WHITE}(Bitcoin Core peer info / map / tools){C_RESET}")
+    print(f"  {C_BOLD}{C_BLUE}Bitcoin Peer Map{C_RESET}")
+    print(f"  Dashboard v{VERSION} {C_WHITE}(Bitcoin node peer info / map / tools){C_RESET}")
     print(f"  {C_BLUE}{'─' * logo_w}{C_RESET}")
     print(f"  Created by mbhillrn")
     print(f"  MIT License – Free to use, modify, and distribute")
