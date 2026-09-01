@@ -1,0 +1,7 @@
+fastapi
+jinja2
+requests
+rich
+sse-starlette
+uvicorn
+

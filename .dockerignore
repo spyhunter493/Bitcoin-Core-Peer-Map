@@ -1,0 +1,17 @@
+.git
+.github
+
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+data/*
+!data/.gitignore
+
+.env
+docker-compose.override.yml
+compose.override.yaml
+
+.DS_Store
+

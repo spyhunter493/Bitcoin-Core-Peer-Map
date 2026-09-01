@@ -1,0 +1,29 @@
+services:
+  mbcore:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      BITCOIN_RPC_HOST: bitcoin
+      BITCOIN_RPC_PORT: 8332
+      BITCOIN_RPC_USER: ${BITCOIN_RPC_USER}
+      BITCOIN_RPC_PASSWORD: ${BITCOIN_RPC_PASSWORD}
+      MBTC_NETWORK: main
+      MBTC_WEB_PORT: 58333
+      MBTC_WEB_BIND: 0.0.0.0
+      GEO_DB_ENABLED: "true"
+      GEO_DB_AUTO_UPDATE: "true"
+    ports:
+      - "58333:58333"
+    volumes:
+      - mbcore-data:/opt/mbcore/data
+    networks:
+      - bitcoin-rpc
+
+volumes:
+  mbcore-data:
+
+networks:
+  bitcoin-rpc:
+    external: true
+
