@@ -141,4 +141,3 @@ fi
 
 echo "MBCore: Bitcoin RPC is available; starting dashboard on $MBTC_WEB_BIND:$MBTC_WEB_PORT"
 exec /opt/venv/bin/python3 /opt/mbcore/web/MBCoreServer.py
-

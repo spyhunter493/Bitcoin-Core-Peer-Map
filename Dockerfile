@@ -30,4 +30,3 @@ EXPOSE 58333
 VOLUME ["/opt/mbcore/data"]
 
 ENTRYPOINT ["/opt/mbcore/docker-entrypoint.sh"]
-

@@ -734,7 +734,7 @@ The Bitcoin node may be in another Compose project or on another host. For separ
 | `GEO_DB_ENABLED` | No | existing value or `true` | Enable the local GeoIP database |
 | `GEO_DB_AUTO_UPDATE` | No | existing value or `true` | Automatically update the GeoIP database |
 
-*Set exactly one of `BITCOIN_RPC_PASSWORD` or `BITCOIN_RPC_PASSWORD_FILE`. For a Compose secret, mount the secret and set, for example, `BITCOIN_RPC_PASSWORD_FILE=/run/secrets/bitcoin_rpc_password`. RPC credentials are written only to `/tmp/mbcore/bitcoin.conf` with mode `0600`; the password is not stored in the persistent MBCore data volume.
+*Set exactly one of `BITCOIN_RPC_PASSWORD` or `BITCOIN_RPC_PASSWORD_FILE`. For a Compose secret, mount the secret and set, for example, `BITCOIN_RPC_PASSWORD_FILE=/run/secrets/bitcoin_rpc_password`. Bind-mounted password files must be readable by the container user (`mbcore`, UID 100), or the startup check will fail before RPC validation. RPC credentials are written only to `/tmp/mbcore/bitcoin.conf` with mode `0600`; the password is not stored in the persistent MBCore data volume.
 
 When `GEO_DB_ENABLED` or `GEO_DB_AUTO_UPDATE` is omitted, an existing value in `data/config.conf` is preserved across restarts. Supplying either variable explicitly overrides the persisted value on each container start.
 
