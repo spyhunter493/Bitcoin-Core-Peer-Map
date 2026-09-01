@@ -5980,7 +5980,7 @@ window.ASDiversity = (function () {
         html += peerDetailRow('Synced Hdrs', peer.synced_headers || '\u2014');
         html += peerDetailRow('Synced Blks', peer.synced_blocks || '\u2014');
         if (peer.transport_protocol_type) html += peerDetailRow('Transport', peer.transport_protocol_type === 'v2' ? 'v2 (BIP324 encrypted)' : peer.transport_protocol_type);
-        if (peer.session_id) html += peerDetailRow('Session ID', '<span style="font-size:9px;word-break:break-all">' + escHtml(peer.session_id) + '</span>');
+        if (peer.session_id) html += peerDetailRow('Session ID', '<span style="font-size:9px;word-break:break-all">' + escHtml(peer.session_id) + '</span>', true);
         if (peer.minfeefilter != null) html += peerDetailRow('Min Fee Filter', peer.minfeefilter > 0 ? (peer.minfeefilter * 100000000).toFixed(0) + ' sat/kvB' : 'None');
         html += '</div>';
 
@@ -6229,14 +6229,15 @@ window.ASDiversity = (function () {
     }
 
     /** Build a simple key-value row for peer detail panel */
-    function peerDetailRow(label, value) {
-        return '<div class="as-detail-sub-row"><span class="as-detail-sub-label">' + escHtml(label) + '</span><span class="as-detail-sub-val">' + value + '</span></div>';
+    function peerDetailRow(label, value, allowHtml) {
+        var renderedValue = allowHtml ? value : escHtml(value);
+        return '<div class="as-detail-sub-row"><span class="as-detail-sub-label">' + escHtml(label) + '</span><span class="as-detail-sub-val">' + renderedValue + '</span></div>';
     }
 
-    /** HTML-escape a string */
+    /** HTML-escape untrusted values before inserting them into markup. */
     function escHtml(s) {
-        if (!s) return '';
-        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     /** Expand service flag abbreviations to full descriptions */
