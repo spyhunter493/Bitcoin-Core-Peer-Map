@@ -1265,7 +1265,7 @@ async def api_changes():
 
 
 @app.get("/api/stats")
-async def api_stats():
+def api_stats():
     """Get dashboard statistics"""
     # Get fresh peer info from RPC
     peers = get_peer_info()
@@ -1626,7 +1626,7 @@ async def api_stream_system(request: Request):
 
 
 @app.get("/api/info")
-async def api_info(currency: str = "USD"):
+def api_info(currency: str = "USD"):
     """Get dashboard info panel data: BTC price, block info, blockchain stats, network scores, geo DB stats"""
     result = {
         'btc_price': None,
@@ -1821,7 +1821,7 @@ async def api_events(request: Request):
 
 
 @app.get("/api/mempool")
-async def api_mempool(currency: str = "USD"):
+def api_mempool(currency: str = "USD"):
     """Get mempool info for the mempool info overlay"""
     result = {
         'mempool': None,
@@ -1867,7 +1867,7 @@ async def api_mempool(currency: str = "USD"):
 
 
 @app.get("/api/blockchain")
-async def api_blockchain():
+def api_blockchain():
     """Get blockchain info for the blockchain info overlay"""
     result = {
         'blockchain': None,
@@ -1899,7 +1899,7 @@ async def api_peer_disconnect(request: Request):
 
         # Use disconnectnode with empty address and nodeid
         cmd = config.get_cli_command() + ['disconnectnode', '', str(peer_id)]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True}
@@ -1921,7 +1921,7 @@ async def api_peer_ban(request: Request):
 
         # First, get peer info to find the address and network type
         cmd = config.get_cli_command() + ['getpeerinfo']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode != 0:
             return {'success': False, 'error': 'Failed to get peer info'}
@@ -1958,7 +1958,7 @@ async def api_peer_ban(request: Request):
 
         # Ban for 24 hours (86400 seconds)
         cmd = config.get_cli_command() + ['setban', ip, 'add', '86400']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True, 'banned_ip': ip, 'network': network}
@@ -1979,7 +1979,7 @@ async def api_peer_unban(request: Request):
             return {'success': False, 'error': 'address is required'}
 
         cmd = config.get_cli_command() + ['setban', address, 'remove']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True}
@@ -1990,7 +1990,7 @@ async def api_peer_unban(request: Request):
 
 
 @app.get("/api/bans")
-async def api_bans():
+def api_bans():
     """List all banned IPs"""
     try:
         cmd = config.get_cli_command() + ['listbanned']
@@ -2006,7 +2006,7 @@ async def api_bans():
 
 
 @app.post("/api/bans/clear")
-async def api_bans_clear():
+def api_bans_clear():
     """Clear all bans"""
     try:
         cmd = config.get_cli_command() + ['clearbanned']
@@ -2055,7 +2055,7 @@ async def api_peer_connect(request: Request):
                 normalized = address + ':8333'
 
         cmd = config.get_cli_command() + ['addnode', normalized, 'onetry']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True, 'address': normalized}
@@ -2132,7 +2132,7 @@ async def api_prompt_ack():
 
 
 @app.post("/api/geodb/update")
-async def api_geodb_update():
+def api_geodb_update():
     """Download and merge the latest geo database from the server"""
     if not geo_db_enabled:
         return {'success': False, 'message': 'Geo database is disabled'}
@@ -2217,7 +2217,7 @@ def _compare_versions(local: str, remote: str) -> bool:
     return False
 
 @app.get("/api/update-check")
-async def api_update_check():
+def api_update_check():
     """Check GitHub for a newer version. Caches result for 30 minutes."""
     now = time.time()
     # Return cached result if fresh (30 min = 1800s)
