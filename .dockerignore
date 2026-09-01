@@ -5,6 +5,10 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
+pytest.ini
+requirements-test.txt
+tests/
 
 data/*
 !data/.gitignore
