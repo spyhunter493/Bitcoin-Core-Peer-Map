@@ -687,6 +687,79 @@ The GeoIP database updates automatically from the [Bitcoin Node GeoIP Dataset](h
 
 ---
 
+## Docker
+
+Docker is an additional deployment option; the existing native `./da.sh` workflow remains unchanged. The image is built directly from the checked-out repository and contains MBCore, Python, and `bitcoin-cli`. It does not contain `bitcoind` and does not need the Bitcoin blockchain or datadir mounted into it.
+
+### Build the image
+
+```bash
+docker build -t mbcore .
+```
+
+### Docker Compose example
+
+Copy the example environment file values into `.env` (which is excluded from the image):
+
+```ini
+BITCOIN_RPC_USER=mbcore
+BITCOIN_RPC_PASSWORD=change-me
+```
+
+Create the external network once, then build and start MBCore:
+
+```bash
+docker network create bitcoin-rpc
+docker compose -f compose.example.yaml build
+docker compose -f compose.example.yaml up -d
+docker compose -f compose.example.yaml logs -f mbcore
+```
+
+Open `http://localhost:58333`. Application data and settings are stored in the `mbcore-data` volume at `/opt/mbcore/data`.
+
+The Bitcoin node may be in another Compose project or on another host. For separate Compose projects, attach both services to the same external `bitcoin-rpc` network and set `BITCOIN_RPC_HOST` to the Bitcoin service or container hostname. Docker DNS then resolves that name without sharing the Bitcoin datadir.
+
+### Environment variables
+
+| Variable | Required | Default | Description |
+|---|---:|---|---|
+| `BITCOIN_RPC_HOST` | No | `bitcoin` | Bitcoin Core/Knots RPC hostname or address |
+| `BITCOIN_RPC_PORT` | No | `8332` | RPC port |
+| `BITCOIN_RPC_USER` | Yes | — | Dedicated RPC username |
+| `BITCOIN_RPC_PASSWORD` | Yes* | — | RPC password |
+| `BITCOIN_RPC_PASSWORD_FILE` | Yes* | — | Path to a Docker/Kubernetes secret containing the RPC password |
+| `MBTC_NETWORK` | No | `main` | `main`, `test`, `signet`, or `regtest` |
+| `MBTC_WEB_PORT` | No | `58333` | Dashboard listen port |
+| `MBTC_WEB_BIND` | No | `0.0.0.0` | `0.0.0.0` or `127.0.0.1` |
+| `GEO_DB_ENABLED` | No | existing value or `true` | Enable the local GeoIP database |
+| `GEO_DB_AUTO_UPDATE` | No | existing value or `true` | Automatically update the GeoIP database |
+
+*Set exactly one of `BITCOIN_RPC_PASSWORD` or `BITCOIN_RPC_PASSWORD_FILE`. For a Compose secret, mount the secret and set, for example, `BITCOIN_RPC_PASSWORD_FILE=/run/secrets/bitcoin_rpc_password`. Bind-mounted password files must be readable by the container user (`mbcore`, UID 100), or the startup check will fail before RPC validation. RPC credentials are written only to `/tmp/mbcore/bitcoin.conf` with mode `0600`; the password is not stored in the persistent MBCore data volume.
+
+When `GEO_DB_ENABLED` or `GEO_DB_AUTO_UPDATE` is omitted, an existing value in `data/config.conf` is preserved across restarts. Supplying either variable explicitly overrides the persisted value on each container start.
+
+The entrypoint verifies RPC connectivity with `bitcoin-cli getnetworkinfo` before starting the web server. Invalid credentials, an unreachable node, or an incorrect network causes a clear startup failure instead of an unusable dashboard.
+
+### Configure the remote Bitcoin node
+
+The Bitcoin Core/Knots node must accept RPC connections from the Docker network. A typical configuration includes:
+
+```ini
+server=1
+rpcbind=0.0.0.0
+rpcallowip=<docker-network-subnet>
+```
+
+Restrict `rpcallowip` to the actual Docker network subnet. Use dedicated MBCore credentials; for production, prefer Bitcoin Core's `rpcauth` mechanism over keeping a plaintext `rpcpassword` in the node's configuration. MBCore still needs the original cleartext password through one of the container variables above so `bitcoin-cli` can authenticate.
+
+### Security and container limitations
+
+MBCore can run administrative RPC commands, including adding or disconnecting peers and managing bans. Do **not** expose port `58333` directly to the public Internet. LAN-only access is the recommended default; add authentication and access controls in a trusted reverse proxy if broader access is required.
+
+Bitcoin data obtained through RPC continues to work normally, including peer and ban management, blockchain, mempool, network, and GeoIP/ASN information. System widgets that read `/proc`, `/`, or network interfaces report the MBCore container's CPU, RAM, disk, and network environment—not the separate Bitcoin node host/container—and may therefore be less useful or misleading.
+
+---
+
 ## Compatibility
 
 **Tested:**

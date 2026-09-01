@@ -2259,7 +2259,7 @@ async def api_update_check():
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Serve the main dashboard page"""
-    return templates.TemplateResponse("bitindex.html", {"request": request, "version": VERSION, "cache_bust": int(time.time())})
+    return templates.TemplateResponse(request, "bitindex.html", {"version": VERSION, "cache_bust": int(time.time())})
 
 
 # Mount static files
