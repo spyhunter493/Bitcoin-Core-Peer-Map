@@ -19,6 +19,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime
@@ -330,6 +331,7 @@ config = Config()
 # Database settings (loaded from config)
 geo_db_enabled = False
 geo_db_auto_update = True
+geo_db_update_lock = threading.Lock()
 
 def cleanup_tmp_dir():
     """Remove any leftover temp files from interrupted downloads"""
@@ -1272,7 +1274,7 @@ async def api_changes():
 
 
 @app.get("/api/stats")
-async def api_stats():
+def api_stats():
     """Get dashboard statistics"""
     # Get fresh peer info from RPC
     peers = get_peer_info()
@@ -1633,7 +1635,7 @@ async def api_stream_system(request: Request):
 
 
 @app.get("/api/info")
-async def api_info(currency: str = "USD"):
+def api_info(currency: str = "USD"):
     """Get dashboard info panel data: BTC price, block info, blockchain stats, network scores, geo DB stats"""
     result = {
         'btc_price': None,
@@ -1828,7 +1830,7 @@ async def api_events(request: Request):
 
 
 @app.get("/api/mempool")
-async def api_mempool(currency: str = "USD"):
+def api_mempool(currency: str = "USD"):
     """Get mempool info for the mempool info overlay"""
     result = {
         'mempool': None,
@@ -1874,7 +1876,7 @@ async def api_mempool(currency: str = "USD"):
 
 
 @app.get("/api/blockchain")
-async def api_blockchain():
+def api_blockchain():
     """Get blockchain info for the blockchain info overlay"""
     result = {
         'blockchain': None,
@@ -1906,7 +1908,7 @@ async def api_peer_disconnect(request: Request):
 
         # Use disconnectnode with empty address and nodeid
         cmd = config.get_cli_command() + ['disconnectnode', '', str(peer_id)]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True}
@@ -1928,7 +1930,7 @@ async def api_peer_ban(request: Request):
 
         # First, get peer info to find the address and network type
         cmd = config.get_cli_command() + ['getpeerinfo']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode != 0:
             return {'success': False, 'error': 'Failed to get peer info'}
@@ -1965,7 +1967,7 @@ async def api_peer_ban(request: Request):
 
         # Ban for 24 hours (86400 seconds)
         cmd = config.get_cli_command() + ['setban', ip, 'add', '86400']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True, 'banned_ip': ip, 'network': network}
@@ -1986,7 +1988,7 @@ async def api_peer_unban(request: Request):
             return {'success': False, 'error': 'address is required'}
 
         cmd = config.get_cli_command() + ['setban', address, 'remove']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True}
@@ -1997,7 +1999,7 @@ async def api_peer_unban(request: Request):
 
 
 @app.get("/api/bans")
-async def api_bans():
+def api_bans():
     """List all banned IPs"""
     try:
         cmd = config.get_cli_command() + ['listbanned']
@@ -2013,7 +2015,7 @@ async def api_bans():
 
 
 @app.post("/api/bans/clear")
-async def api_bans_clear():
+def api_bans_clear():
     """Clear all bans"""
     try:
         cmd = config.get_cli_command() + ['clearbanned']
@@ -2062,7 +2064,7 @@ async def api_peer_connect(request: Request):
                 normalized = address + ':8333'
 
         cmd = config.get_cli_command() + ['addnode', normalized, 'onetry']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True, 'address': normalized}
@@ -2139,26 +2141,41 @@ async def api_prompt_ack():
 
 
 @app.post("/api/geodb/update")
-async def api_geodb_update():
+def api_geodb_update():
     """Download, validate, and merge the latest geo database."""
     if not geo_db_enabled:
         return {"success": False, "message": "Geo database is disabled"}
+    if not geo_db_update_lock.acquire(blocking=False):
+        return {"success": False, "message": "Geo database update already in progress"}
 
-    TMP_DIR.mkdir(parents=True, exist_ok=True)
-    tmp_path = TMP_DIR / "geo_download.db"
-    tmp_path.unlink(missing_ok=True)
+    tmp_path = None
 
     try:
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
         with requests.get(GEO_DB_REPO_URL, timeout=60, stream=True) as resp:
             if resp.status_code != 200:
                 return {"success": False, "message": f"Download failed (HTTP {resp.status_code})"}
 
             content_length = resp.headers.get("Content-Length")
-            if content_length and int(content_length) > GEO_DB_MAX_DOWNLOAD_BYTES:
-                return {"success": False, "message": "Downloaded database exceeds the 100 MiB size limit"}
+            if content_length:
+                try:
+                    expected_bytes = int(content_length)
+                except ValueError as exc:
+                    raise ValueError("Download returned an invalid Content-Length") from exc
+                if expected_bytes < 0:
+                    raise ValueError("Download returned an invalid Content-Length")
+                if expected_bytes > GEO_DB_MAX_DOWNLOAD_BYTES:
+                    raise ValueError("Downloaded database exceeds the 100 MiB size limit")
 
             downloaded = 0
-            with open(tmp_path, "wb") as output:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=TMP_DIR,
+                prefix="geo_download_",
+                suffix=".db",
+                delete=False,
+            ) as output:
+                tmp_path = Path(output.name)
                 for chunk in resp.iter_content(chunk_size=64 * 1024):
                     if not chunk:
                         continue
@@ -2204,7 +2221,12 @@ async def api_geodb_update():
     except (OSError, ValueError, sqlite3.Error, requests.RequestException) as exc:
         return {"success": False, "message": str(exc)}
     finally:
-        tmp_path.unlink(missing_ok=True)
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        geo_db_update_lock.release()
 
 @app.get("/api/cli-info")
 async def api_cli_info():
@@ -2242,7 +2264,7 @@ def _compare_versions(local: str, remote: str) -> bool:
     return False
 
 @app.get("/api/update-check")
-async def api_update_check():
+def api_update_check():
     """Check GitHub for a newer version. Caches result for 30 minutes."""
     now = time.time()
     # Return cached result if fresh (30 min = 1800s)
@@ -2284,7 +2306,7 @@ async def api_update_check():
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Serve the main dashboard page"""
-    return templates.TemplateResponse("bitindex.html", {"request": request, "version": VERSION, "cache_bust": int(time.time())})
+    return templates.TemplateResponse(request, "bitindex.html", {"version": VERSION, "cache_bust": int(time.time())})
 
 
 # Mount static files
