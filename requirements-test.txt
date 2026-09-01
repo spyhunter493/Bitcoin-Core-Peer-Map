@@ -1,7 +1,2 @@
-fastapi
-jinja2
+-r requirements.txt
 pytest
-requests
-sse-starlette
-uvicorn
-
