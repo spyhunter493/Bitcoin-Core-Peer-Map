@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-MBTC-DASH - FastAPI Web Server
-Local web dashboard for Bitcoin peer monitoring and management
+Bitcoin Peer Map - FastAPI Web Server
+Local dashboard for Bitcoin peer monitoring and management
 
 Features:
 - Fixed port 58333 (or manual selection if blocked)
@@ -19,6 +19,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime
@@ -46,6 +47,13 @@ RECENT_WINDOW = 20     # Seconds for recent changes
 
 # Geo database repository URL
 GEO_DB_REPO_URL = "https://raw.githubusercontent.com/mbhillrn/Bitcoin-Node-GeoIP-Dataset/main/geo.db"
+GEO_DB_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
+GEO_DB_COLUMNS = (
+    "ip", "continent", "continentCode", "country", "countryCode", "region",
+    "regionName", "city", "district", "zip", "lat", "lon", "timezone",
+    "utc_offset", "currency", "isp", "org", "as_info", "asname", "mobile",
+    "proxy", "hosting", "last_updated",
+)
 
 # Default port for web dashboard (can be configured)
 DEFAULT_WEB_PORT = 58333
@@ -217,7 +225,7 @@ offline_start = os.environ.get('MBTC_OFFLINE_START', '0') == '1'
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # FastAPI app
-app = FastAPI(title="MBTC-DASH", description="Bitcoin Peer Dashboard")
+app = FastAPI(title="Bitcoin Peer Map", description="Bitcoin peer monitoring and management dashboard")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Thread-safe state
@@ -323,6 +331,7 @@ config = Config()
 # Database settings (loaded from config)
 geo_db_enabled = False
 geo_db_auto_update = True
+geo_db_update_lock = threading.Lock()
 
 def cleanup_tmp_dir():
     """Remove any leftover temp files from interrupted downloads"""
@@ -1265,7 +1274,7 @@ async def api_changes():
 
 
 @app.get("/api/stats")
-async def api_stats():
+def api_stats():
     """Get dashboard statistics"""
     # Get fresh peer info from RPC
     peers = get_peer_info()
@@ -1626,7 +1635,7 @@ async def api_stream_system(request: Request):
 
 
 @app.get("/api/info")
-async def api_info(currency: str = "USD"):
+def api_info(currency: str = "USD"):
     """Get dashboard info panel data: BTC price, block info, blockchain stats, network scores, geo DB stats"""
     result = {
         'btc_price': None,
@@ -1821,7 +1830,7 @@ async def api_events(request: Request):
 
 
 @app.get("/api/mempool")
-async def api_mempool(currency: str = "USD"):
+def api_mempool(currency: str = "USD"):
     """Get mempool info for the mempool info overlay"""
     result = {
         'mempool': None,
@@ -1867,7 +1876,7 @@ async def api_mempool(currency: str = "USD"):
 
 
 @app.get("/api/blockchain")
-async def api_blockchain():
+def api_blockchain():
     """Get blockchain info for the blockchain info overlay"""
     result = {
         'blockchain': None,
@@ -1899,7 +1908,7 @@ async def api_peer_disconnect(request: Request):
 
         # Use disconnectnode with empty address and nodeid
         cmd = config.get_cli_command() + ['disconnectnode', '', str(peer_id)]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True}
@@ -1921,7 +1930,7 @@ async def api_peer_ban(request: Request):
 
         # First, get peer info to find the address and network type
         cmd = config.get_cli_command() + ['getpeerinfo']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode != 0:
             return {'success': False, 'error': 'Failed to get peer info'}
@@ -1958,7 +1967,7 @@ async def api_peer_ban(request: Request):
 
         # Ban for 24 hours (86400 seconds)
         cmd = config.get_cli_command() + ['setban', ip, 'add', '86400']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True, 'banned_ip': ip, 'network': network}
@@ -1979,7 +1988,7 @@ async def api_peer_unban(request: Request):
             return {'success': False, 'error': 'address is required'}
 
         cmd = config.get_cli_command() + ['setban', address, 'remove']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True}
@@ -1990,7 +1999,7 @@ async def api_peer_unban(request: Request):
 
 
 @app.get("/api/bans")
-async def api_bans():
+def api_bans():
     """List all banned IPs"""
     try:
         cmd = config.get_cli_command() + ['listbanned']
@@ -2006,7 +2015,7 @@ async def api_bans():
 
 
 @app.post("/api/bans/clear")
-async def api_bans_clear():
+def api_bans_clear():
     """Clear all bans"""
     try:
         cmd = config.get_cli_command() + ['clearbanned']
@@ -2055,7 +2064,7 @@ async def api_peer_connect(request: Request):
                 normalized = address + ':8333'
 
         cmd = config.get_cli_command() + ['addnode', normalized, 'onetry']
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
             return {'success': True, 'address': normalized}
@@ -2132,54 +2141,92 @@ async def api_prompt_ack():
 
 
 @app.post("/api/geodb/update")
-async def api_geodb_update():
-    """Download and merge the latest geo database from the server"""
+def api_geodb_update():
+    """Download, validate, and merge the latest geo database."""
     if not geo_db_enabled:
-        return {'success': False, 'message': 'Geo database is disabled'}
+        return {"success": False, "message": "Geo database is disabled"}
+    if not geo_db_update_lock.acquire(blocking=False):
+        return {"success": False, "message": "Geo database update already in progress"}
+
+    tmp_path = None
+
     try:
         TMP_DIR.mkdir(parents=True, exist_ok=True)
-        tmp_path = TMP_DIR / 'geo_download.db'
-        # Download remote database
-        resp = requests.get(GEO_DB_REPO_URL, timeout=60, stream=True)
-        if resp.status_code != 200:
-            return {'success': False, 'message': f'Download failed (HTTP {resp.status_code})'}
-        with open(tmp_path, 'wb') as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                f.write(chunk)
-        # Validate it's a real SQLite database with the expected table
-        try:
-            tmp_conn = sqlite3.connect(tmp_path)
-            remote_rows = tmp_conn.execute('SELECT * FROM geo_cache').fetchall()
-            col_names = [desc[0] for desc in tmp_conn.execute('SELECT * FROM geo_cache LIMIT 0').description]
-            tmp_conn.close()
-        except Exception:
-            tmp_path.unlink(missing_ok=True)
-            return {'success': False, 'message': 'Downloaded file is not a valid geo database'}
+        with requests.get(GEO_DB_REPO_URL, timeout=60, stream=True) as resp:
+            if resp.status_code != 200:
+                return {"success": False, "message": f"Download failed (HTTP {resp.status_code})"}
+
+            content_length = resp.headers.get("Content-Length")
+            if content_length:
+                try:
+                    expected_bytes = int(content_length)
+                except ValueError as exc:
+                    raise ValueError("Download returned an invalid Content-Length") from exc
+                if expected_bytes < 0:
+                    raise ValueError("Download returned an invalid Content-Length")
+                if expected_bytes > GEO_DB_MAX_DOWNLOAD_BYTES:
+                    raise ValueError("Downloaded database exceeds the 100 MiB size limit")
+
+            downloaded = 0
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=TMP_DIR,
+                prefix="geo_download_",
+                suffix=".db",
+                delete=False,
+            ) as output:
+                tmp_path = Path(output.name)
+                for chunk in resp.iter_content(chunk_size=64 * 1024):
+                    if not chunk:
+                        continue
+                    downloaded += len(chunk)
+                    if downloaded > GEO_DB_MAX_DOWNLOAD_BYTES:
+                        raise ValueError("Downloaded database exceeds the 100 MiB size limit")
+                    output.write(chunk)
+
+        with sqlite3.connect(f"file:{tmp_path}?mode=ro", uri=True) as remote_conn:
+            integrity = remote_conn.execute("PRAGMA quick_check").fetchone()
+            if not integrity or integrity[0] != "ok":
+                raise ValueError("Downloaded database failed SQLite integrity validation")
+
+            schema = remote_conn.execute("PRAGMA table_info(geo_cache)").fetchall()
+            remote_columns = tuple(row[1] for row in schema)
+            if remote_columns != GEO_DB_COLUMNS:
+                raise ValueError("Downloaded database has an unexpected geo_cache schema")
+
+            column_list = ",".join(GEO_DB_COLUMNS)
+            remote_rows = remote_conn.execute(f"SELECT {column_list} FROM geo_cache").fetchall()
+
         remote_count = len(remote_rows)
         if remote_count == 0:
-            tmp_path.unlink(missing_ok=True)
-            return {'success': False, 'message': 'Remote database is empty'}
+            raise ValueError("Remote database is empty")
+
         if not GEO_DB_FILE.exists():
-            # No local DB — just use the downloaded one
-            tmp_path.rename(GEO_DB_FILE)
-            return {'success': True, 'message': f'Downloaded database ({remote_count} entries)'}
-        # Merge: read remote rows into memory, insert into local DB
-        tmp_path.unlink(missing_ok=True)
-        placeholders = ','.join(['?'] * len(col_names))
-        conn = sqlite3.connect(GEO_DB_FILE, timeout=5)
-        before = conn.execute('SELECT COUNT(*) FROM geo_cache').fetchone()[0]
-        conn.executemany(f"INSERT OR IGNORE INTO geo_cache ({','.join(col_names)}) VALUES ({placeholders})", remote_rows)
-        conn.commit()
-        total = conn.execute('SELECT COUNT(*) FROM geo_cache').fetchone()[0]
-        conn.close()
+            tmp_path.replace(GEO_DB_FILE)
+            return {"success": True, "message": f"Downloaded database ({remote_count} entries)"}
+
+        placeholders = ",".join(["?"] * len(GEO_DB_COLUMNS))
+        with sqlite3.connect(GEO_DB_FILE, timeout=5) as conn:
+            before = conn.execute("SELECT COUNT(*) FROM geo_cache").fetchone()[0]
+            conn.executemany(
+                f"INSERT OR IGNORE INTO geo_cache ({column_list}) VALUES ({placeholders})",
+                remote_rows,
+            )
+            total = conn.execute("SELECT COUNT(*) FROM geo_cache").fetchone()[0]
+
         new_count = total - before
         if new_count > 0:
-            return {'success': True, 'message': f'+{new_count} new entries ({total} total)'}
-        else:
-            return {'success': True, 'message': f'Already up to date ({total} entries)'}
-    except Exception as e:
-        return {'success': False, 'message': str(e)}
-
+            return {"success": True, "message": f"+{new_count} new entries ({total} total)"}
+        return {"success": True, "message": f"Already up to date ({total} entries)"}
+    except (OSError, ValueError, sqlite3.Error, requests.RequestException) as exc:
+        return {"success": False, "message": str(exc)}
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        geo_db_update_lock.release()
 
 @app.get("/api/cli-info")
 async def api_cli_info():
@@ -2217,7 +2264,7 @@ def _compare_versions(local: str, remote: str) -> bool:
     return False
 
 @app.get("/api/update-check")
-async def api_update_check():
+def api_update_check():
     """Check GitHub for a newer version. Caches result for 30 minutes."""
     now = time.time()
     # Return cached result if fresh (30 min = 1800s)
@@ -2259,7 +2306,7 @@ async def api_update_check():
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Serve the main dashboard page"""
-    return templates.TemplateResponse("bitindex.html", {"request": request, "version": VERSION, "cache_bust": int(time.time())})
+    return templates.TemplateResponse(request, "bitindex.html", {"version": VERSION, "cache_bust": int(time.time())})
 
 
 # Mount static files
@@ -2410,7 +2457,7 @@ def main():
     print("")
     print(f"{C_BLUE}{'═' * line_w}{C_RESET}")
     print(f"  {C_BOLD}{C_BLUE}Bitcoin Peer Map{C_RESET}")
-    print(f"  Dashboard v{VERSION} {C_WHITE}(Bitcoin node peer info / map / tools){C_RESET}")
+    print(f"  Dashboard v{VERSION} {C_WHITE}(peer info / map / tools){C_RESET}")
     print(f"  {C_BLUE}{'─' * logo_w}{C_RESET}")
     print(f"  Created by mbhillrn")
     print(f"  MIT License – Free to use, modify, and distribute")

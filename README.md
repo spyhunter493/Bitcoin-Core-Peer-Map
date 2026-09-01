@@ -42,10 +42,10 @@ This means you can answer questions like "Which of my peers running Satoshi 28.1
 - **33-column sortable, filterable peer table** (16 default + 17 advanced) with click-to-fly-to-map on every row
 - **Local GeoIP database** with automatic updates from the [Bitcoin Node GeoIP Dataset](https://github.com/mbhillrn/Bitcoin-Node-GeoIP-Dataset), works offline for cached peers
 - **4 built-in themes** (Dark, Light, OLED, Midnight) with fully customizable map appearance: land, ocean, borders, grid, peer effects, and more
-- **Zero config:** auto-detects your Bitcoin node installation
+- **Zero config:** auto-detects your local Bitcoin Core or Bitcoin Knots installation
 - **Single script install:** no accounts, no API keys, no external services requiring signup
 
-**Requires:** [Bitcoin node](https://bitcoincore.org/) (`bitcoind`) installed and running.
+**Requires:** a running **Bitcoin Core** or **Bitcoin Knots** node with RPC access enabled. The native installer also requires `bitcoin-cli`; the Docker image includes it.
 
 ---
 
@@ -145,7 +145,7 @@ Clicking any provider segment on the donut chart (or any provider name anywhere 
 
 - **Peers:** Total, Inbound, Outbound, and connection type breakdown (Full Relay, Block Relay Only, Manual, etc.). Click any count to see the specific peers in a sub-menu, then click any peer to locate it on the map.
 - **Performance:** Average connection duration, average ping latency, total data sent, total data received
-- **Software:** Every version of Bitcoin node running through that provider's peers (e.g., `/Satoshi:28.1.0/`, `/Satoshi:30.0.0/`). Click any version to see which peers are running it, then click any peer to see it on the map.
+- **Software:** Every peer-reported software version seen through that provider (e.g., `/Satoshi:28.1.0/`, `/Satoshi:30.0.0/`). Click any version to see which peers report it, then click any peer to see it on the map.
 - **Countries:** Geographic distribution of peers within that provider. Click any country to see peers in that country, then click through to any individual peer.
 - **Services:** Service flag combinations advertised by that provider's peers (e.g., `N W P`, `NL W P`). Click any combination to see peers advertising those flags, then drill to the map.
 
@@ -448,7 +448,7 @@ The bottom panel shows all connected peers in a sortable, filterable table with 
 | Duration | Duration | How long the peer has been connected (formatted as hours/minutes/seconds) |
 | Type | Type | Connection type and direction (see connection types below) |
 | IP:Port | IP:Port | Peer's network address and port |
-| Software | Software | The peer's peer-reported software version string (subver) |
+| Software | Software | The software version string reported by the peer (subver) |
 | Services | Services | Service flags advertised by the peer (see service flags below) |
 | City | City | Geolocated city |
 | Region | Region | State or province |
@@ -693,7 +693,84 @@ Bitcoin Peer Map talks to the configured node through `bitcoin-cli` and a Bitcoi
 
 This project is independent and is not affiliated with Bitcoin Core or Bitcoin Knots.
 
-### Operating systems
+Internal compatibility names such as `MBCoreServer.py`, `MBTC_*`, the `mbcore` Compose service, and the `mbcore-data` volume are retained so existing installations, settings, and deployment commands continue to work.
+
+---
+
+## Docker
+
+Docker is an additional deployment option; the existing native `./da.sh` workflow remains unchanged. The image is built directly from the checked-out repository and contains Bitcoin Peer Map, Python, and `bitcoin-cli`. It does not contain a Bitcoin node daemon and does not need the blockchain or node datadir mounted into it.
+
+### Build the image
+
+```bash
+docker build -t mbcore .
+```
+
+### Docker Compose example
+
+Copy the example environment file values into `.env` (which is excluded from the image):
+
+```ini
+BITCOIN_RPC_USER=mbcore
+BITCOIN_RPC_PASSWORD=change-me
+```
+
+Create the external network once, then build and start Bitcoin Peer Map:
+
+```bash
+docker network create bitcoin-rpc
+docker compose -f compose.example.yaml build
+docker compose -f compose.example.yaml up -d
+docker compose -f compose.example.yaml logs -f mbcore
+```
+
+Open `http://localhost:58333`. Application data and settings are stored in the `mbcore-data` volume at `/opt/mbcore/data`.
+
+The Bitcoin node may be in another Compose project or on another host. For separate Compose projects, attach both services to the same external `bitcoin-rpc` network and set `BITCOIN_RPC_HOST` to the Bitcoin service or container hostname. Docker DNS then resolves that name without sharing the Bitcoin datadir.
+
+### Environment variables
+
+| Variable | Required | Default | Description |
+|---|---:|---|---|
+| `BITCOIN_RPC_HOST` | No | `bitcoin` | Bitcoin Core/Knots RPC hostname or address |
+| `BITCOIN_RPC_PORT` | No | `8332` | RPC port |
+| `BITCOIN_RPC_USER` | Yes | — | Dedicated RPC username |
+| `BITCOIN_RPC_PASSWORD` | Yes* | — | RPC password |
+| `BITCOIN_RPC_PASSWORD_FILE` | Yes* | — | Path to a Docker/Kubernetes secret containing the RPC password |
+| `MBTC_NETWORK` | No | `main` | `main`, `test`, `signet`, or `regtest` |
+| `MBTC_WEB_PORT` | No | `58333` | Dashboard listen port |
+| `MBTC_WEB_BIND` | No | `0.0.0.0` | `0.0.0.0` or `127.0.0.1` |
+| `GEO_DB_ENABLED` | No | existing value or `true` | Enable the local GeoIP database |
+| `GEO_DB_AUTO_UPDATE` | No | existing value or `true` | Automatically update the GeoIP database |
+
+*Set exactly one of `BITCOIN_RPC_PASSWORD` or `BITCOIN_RPC_PASSWORD_FILE`. For a Compose secret, mount the secret and set, for example, `BITCOIN_RPC_PASSWORD_FILE=/run/secrets/bitcoin_rpc_password`. Bind-mounted password files must be readable by the container user (`mbcore`, UID 100), or the startup check will fail before RPC validation. RPC credentials are written only to `/tmp/mbcore/bitcoin.conf` with mode `0600`; the password is not stored in the persistent application data volume.
+
+When `GEO_DB_ENABLED` or `GEO_DB_AUTO_UPDATE` is omitted, an existing value in `data/config.conf` is preserved across restarts. Supplying either variable explicitly overrides the persisted value on each container start.
+
+The entrypoint verifies RPC connectivity with `bitcoin-cli getnetworkinfo` before starting the web server. Invalid credentials, an unreachable node, or an incorrect network causes a clear startup failure instead of an unusable dashboard.
+
+### Configure the remote Bitcoin node
+
+The Bitcoin Core/Knots node must accept RPC connections from the Docker network. A typical configuration includes:
+
+```ini
+server=1
+rpcbind=0.0.0.0
+rpcallowip=<docker-network-subnet>
+```
+
+Restrict `rpcallowip` to the actual Docker network subnet. Use dedicated dashboard credentials; for production, prefer Bitcoin Core's `rpcauth` mechanism over keeping a plaintext `rpcpassword` in the node's configuration. Bitcoin Peer Map still needs the original cleartext password through one of the container variables above so `bitcoin-cli` can authenticate.
+
+### Security and container limitations
+
+Bitcoin Peer Map can run administrative RPC commands, including adding or disconnecting peers and managing bans. Do **not** expose port `58333` directly to the public Internet. LAN-only access is the recommended default; add authentication and access controls in a trusted reverse proxy if broader access is required.
+
+Bitcoin data obtained through RPC continues to work normally, including peer and ban management, blockchain, mempool, network, and GeoIP/ASN information. System widgets that read `/proc`, `/`, or network interfaces report the application container's CPU, RAM, disk, and network environment—not the separate Bitcoin node host/container—and may therefore be less useful or misleading.
+
+---
+
+## Operating system compatibility
 
 **Tested:**
 - Ubuntu 22.04, 24.04, Linux Mint, Debian
@@ -738,7 +815,7 @@ Bitcoin-Core-Peer-Map/
 |---------|----------|
 | Dashboard won't load from another device | Use the **Firewall Helper** (option 3) or manually allow port 58333 |
 | Dashboard won't load at all | Close old browser tabs, check `ss -tlnp \| grep 58333` for port conflicts |
-| Bitcoin node not detected | Make sure `bitcoind` is running, or use **m) Manual Settings** |
+| Bitcoin node not detected | Make sure the node daemon and `bitcoin-cli` are available, or use **m) Manual Settings** |
 | Peers show "Unknown" location | Geolocation is in progress, new peers are looked up as they connect |
 
 ---

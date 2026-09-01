@@ -1,7 +1,7 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════════
-#  MBTC-DASH - Bitcoin Peer Map
-#  A monitoring and management interface for Bitcoin node
+#  Bitcoin Peer Map
+#  A monitoring and management interface for a Bitcoin node
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set -e
@@ -75,7 +75,7 @@ show_banner() {
     fi
     echo ""
     echo -e "${T_PRIMARY}${BOLD}  Bitcoin Peer Map${RST}"
-    echo -e "  ${T_WHITE}Dashboard${RST}  ${T_DIM}v${VERSION}${RST} ${T_WHITE}(Bitcoin node peer info/map/tools)${RST}"
+    echo -e "  ${T_WHITE}Dashboard${RST}  ${T_DIM}v${VERSION}${RST} ${T_WHITE}(peer info / map / tools)${RST}"
     echo -e "  ────────────────────────────────────────────────────"
     echo -e "  ${T_DIM}Created by mbhillrn${RST}"
     echo -e "  ${T_DIM}MIT License - Free to use, modify, and distribute${RST}"
@@ -112,7 +112,7 @@ show_status() {
             msg_ok "Bitcoin node is running and responding"
         else
             echo ""
-            msg_warn "Bitcoin node not responding (is bitcoind running?)"
+            msg_warn "Bitcoin node not responding (is the node daemon running?)"
         fi
     else
         msg_warn "Not configured - run detection first"
@@ -129,7 +129,7 @@ show_menu() {
     echo -e "${T_SECONDARY}${BOLD}Main Menu${RST}"
     echo ""
     echo -e "  ${T_INFO}1)${RST} Enter Bitcoin Peer Map"
-    echo -e "     ${T_DIM}- Bitcoin node peer info/map/tools${RST}"
+    echo -e "     ${T_DIM}- Peer info / map / tools${RST}"
     echo -e "     ${T_DIM}- Instructions on access viewable on the next page!${RST}"
     echo -e "  ${T_INFO}2)${RST} Reset Bitcoin Peer Map Config"
     echo -e "     ${T_DIM}- Clear saved configuration${RST}"

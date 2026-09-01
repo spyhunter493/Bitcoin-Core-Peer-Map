@@ -585,7 +585,7 @@
         ipv4: 'IPv4', ipv6: 'IPv6', onion: 'Tor', i2p: 'I2P', cjdns: 'CJDNS',
     };
 
-    // Bitcoin node service flag abbreviations and descriptions
+    // Bitcoin protocol service flag abbreviations and descriptions
     const SERVICE_FLAGS = {
         'NETWORK':          { abbr: 'N',  desc: 'Full chain history (NODE_NETWORK)' },
         'WITNESS':          { abbr: 'W',  desc: 'Segregated Witness support (NODE_WITNESS)' },
@@ -904,7 +904,7 @@
         if (info.isOverlay) {
             html += '<div class="fdt-row-muted">Overlay network (no reliable local score)</div>';
         } else if (scoreVal) {
-            html += `<div class="fdt-row">Local Bitcoin node Network Score: ${scoreVal}</div>`;
+            html += `<div class="fdt-row">Local Network Score: ${scoreVal}</div>`;
         }
 
         if (isEnabled) {
@@ -912,7 +912,7 @@
                 html += '<div class="fdt-row-muted">Appears to be properly configured</div>';
             }
         } else {
-            html += '<div class="fdt-warn">This network is either disabled, or not currently connected.<br>Please check your settings in Bitcoin node</div>';
+            html += '<div class="fdt-warn">This network is either disabled or not currently connected.<br>Please check your node network settings.</div>';
         }
 
         return html;
@@ -1346,7 +1346,7 @@
         overlay.innerHTML = `<div class="modal-box" style="max-width:520px">
             <div class="modal-header"><span class="modal-title">Connect Peer</span><button class="modal-close" id="connect-close">&times;</button></div>
             <div class="modal-body">
-                <div class="connect-instructions">Enter a peer address to connect. Bitcoin node will attempt a one-time (onetry) connection.</div>
+                <div class="connect-instructions">Enter a peer address to connect. Your node will attempt a one-time (onetry) connection.</div>
                 <div class="connect-example">IPv4: 1.2.3.4:8333</div>
                 <div class="connect-example">IPv6: [2001:db8::1]:8333</div>
                 <div class="connect-example">Tor: abc...xyz.onion:8333</div>
@@ -4404,7 +4404,7 @@
         if (lastNodeInfo) {
             const info = lastNodeInfo;
             const ver = info.subversion || '\u2014';
-            html += mrow('Version', ver, 'Bitcoin node user agent string', ver);
+            html += mrow('Version', ver, 'Node-reported user agent string', ver);
             html += mrow('Peers', info.connected != null ? info.connected : '\u2014', 'Total number of connected peers', info.connected != null ? `${info.connected} peers connected` : '');
             if (info.blockchain) {
                 html += mrow('Size (Disk)', `${info.blockchain.size_gb} GB`, 'Total blockchain data stored on disk', `${info.blockchain.size_gb} GB`);
@@ -5085,7 +5085,7 @@
     /**
      * Connection-age brightness.
      * New peers start dim, veteran peers glow fully.
-     * Uses conntime (Unix timestamp from Bitcoin node) to compute real age.
+     * Uses the node-reported conntime Unix timestamp to compute real age.
      */
     function getAgeBrightness(node, nowSec) {
         if (!node.conntime || node.conntime <= 0) return CFG.ageBrightnessMax;
@@ -7761,7 +7761,7 @@
 
         let html = '<div class="dsp-title">Map Settings</div>';
         html += '<div class="dsp-section">Update Frequency</div>';
-        html += `<div class="dsp-row"><span class="dsp-label" title="How often peer list is fetched from Bitcoin node">Peer list</span><div class="dsp-input-wrap"><input type="number" class="dsp-input" id="dsp-poll-sec" value="${pollSec}" min="3" max="120"><span class="dsp-unit">sec</span></div></div>`;
+        html += `<div class="dsp-row"><span class="dsp-label" title="How often the peer list is fetched from your node">Peer list</span><div class="dsp-input-wrap"><input type="number" class="dsp-input" id="dsp-poll-sec" value="${pollSec}" min="3" max="120"><span class="dsp-unit">sec</span></div></div>`;
         html += `<div class="dsp-row"><span class="dsp-label" title="How often node info and BTC price are refreshed">Node info &amp; price</span><div class="dsp-input-wrap"><input type="number" class="dsp-input" id="dsp-info-sec" value="${infoSec}" min="5" max="120"><span class="dsp-unit">sec</span></div></div>`;
         html += '<div class="dsp-section">Show / Hide</div>';
         visItems.forEach(item => {

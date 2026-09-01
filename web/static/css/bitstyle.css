@@ -2874,3 +2874,59 @@ body.donut-focused .map-controls {
     font-size: 9px;
     flex-shrink: 0;
 }
+
+/* Keep the branded top bar readable as horizontal space tightens. */
+@media (max-width: 1350px) {
+    #topbar {
+        padding: 0 12px;
+    }
+    .topbar-left,
+    .topbar-right {
+        gap: 6px;
+    }
+    .logo,
+    .logo-m,
+    .logo-b {
+        font-size: 28px;
+        letter-spacing: 0;
+    }
+    .version {
+        padding: 2px 5px;
+        font-size: 10px;
+    }
+    .fd-content {
+        gap: 2px;
+    }
+    .fd-net-chip {
+        gap: 3px;
+        padding: 2px 5px;
+    }
+    .fd-net-name,
+    .fd-net-counts {
+        font-size: 11px;
+    }
+    .tb-label {
+        display: none;
+    }
+}
+
+@media (max-width: 1120px) {
+    .topbar-center {
+        display: none;
+    }
+}
+
+@media (max-width: 720px) {
+    #topbar {
+        padding: 0 10px;
+    }
+    .logo,
+    .logo-m,
+    .logo-b {
+        font-size: 24px;
+    }
+    .version,
+    .topbar-right > :not(.topbar-dots):not(.topbar-gear) {
+        display: none !important;
+    }
+}
