@@ -35,6 +35,17 @@ export MBTC_CONFIGURED=0
 # CONFIG FILE FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+is_config_key() {
+    case "$1" in
+        MBTC_CLI_PATH|MBTC_DATADIR|MBTC_CONF|MBTC_NETWORK|MBTC_RPC_HOST|MBTC_RPC_PORT|MBTC_RPC_USER|MBTC_COOKIE_PATH|MBTC_WEB_PORT|MBTC_WEB_BIND|MBTC_CONFIGURED|GEO_DB_ENABLED|GEO_DB_AUTO_UPDATE) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+is_single_line_config_value() {
+    [[ "$1" != *$'\n'* && "$1" != *$'\r'* ]]
+}
+
 # Load configuration from cache file
 # Returns: 0 if loaded successfully, 1 if no config exists
 load_config() {
@@ -43,10 +54,7 @@ load_config() {
     local key value
     while IFS='=' read -r key value; do
         [[ -z "$key" || "$key" == \#* ]] && continue
-        case "$key" in
-            MBTC_CLI_PATH|MBTC_DATADIR|MBTC_CONF|MBTC_NETWORK|MBTC_RPC_HOST|MBTC_RPC_PORT|MBTC_RPC_USER|MBTC_COOKIE_PATH|MBTC_WEB_PORT|MBTC_WEB_BIND|MBTC_CONFIGURED|GEO_DB_ENABLED|GEO_DB_AUTO_UPDATE) ;;
-            *) continue ;;
-        esac
+        is_config_key "$key" || continue
 
         if [[ "$value" == \"*\" && "$value" == *\" ]]; then
             value="${value:1:${#value}-2}"
@@ -54,7 +62,7 @@ load_config() {
             value="${value:1:${#value}-2}"
         fi
         printf -v "$key" '%s' "$value"
-        export "$key"
+        export "${key?}"
     done < "$MBTC_CACHE_FILE"
 
     [[ -z "$MBTC_CLI_PATH" ]] && return 1
@@ -65,6 +73,14 @@ load_config() {
 # Save current configuration to cache file
 # Preserves any extra keys (GEO_DB_*, etc.) that were added via set_config
 save_config() {
+    local value
+    for value in \
+        "$MBTC_CLI_PATH" "$MBTC_DATADIR" "$MBTC_CONF" "$MBTC_NETWORK" \
+        "$MBTC_RPC_HOST" "$MBTC_RPC_PORT" "$MBTC_RPC_USER" "$MBTC_COOKIE_PATH" \
+        "$MBTC_WEB_PORT" "$MBTC_WEB_BIND"; do
+        is_single_line_config_value "$value" || return 1
+    done
+
     mkdir -p "$MBTC_CONFIG_DIR"
 
     # Collect extra keys that aren't part of the core config
@@ -119,7 +135,8 @@ set_config() {
     local key="$1"
     local value="$2"
 
-    [[ "$key" =~ ^(MBTC_[A-Z0-9_]+|GEO_DB_(ENABLED|AUTO_UPDATE))$ ]] || return 1
+    is_config_key "$key" || return 1
+    is_single_line_config_value "$value" || return 1
 
     mkdir -p "$MBTC_CONFIG_DIR"
 

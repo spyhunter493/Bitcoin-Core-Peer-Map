@@ -135,7 +135,11 @@ case "$MBTC_NETWORK" in
 esac
 
 echo "MBCore: checking Bitcoin RPC at $BITCOIN_RPC_HOST:$BITCOIN_RPC_PORT ($MBTC_NETWORK)"
-if ! /usr/bin/bitcoin-cli -conf="$BITCOIN_CONF" $network_option getnetworkinfo >/dev/null 2>&1; then
+set -- /usr/bin/bitcoin-cli "-conf=$BITCOIN_CONF"
+if [ -n "$network_option" ]; then
+    set -- "$@" "$network_option"
+fi
+if ! "$@" getnetworkinfo >/dev/null 2>&1; then
     die "Bitcoin RPC connectivity check failed for $BITCOIN_RPC_HOST:$BITCOIN_RPC_PORT; check the RPC address, network, credentials, rpcbind, and rpcallowip settings"
 fi
 
