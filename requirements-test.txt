@@ -1,0 +1,7 @@
+fastapi
+jinja2
+pytest
+requests
+sse-starlette
+uvicorn
+
