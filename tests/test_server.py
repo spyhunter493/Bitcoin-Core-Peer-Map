@@ -1,10 +1,11 @@
+import asyncio
 import sqlite3
 import threading
 from pathlib import Path
 
 import pytest
 
-from web import MBCoreServer as server
+from bitcoin_peer_map import server
 
 
 @pytest.mark.parametrize(
@@ -23,20 +24,20 @@ def test_config_builds_network_specific_cli_command(
     config_file.write_text(
         '\n'.join(
             [
-                'MBTC_CLI_PATH="/usr/bin/bitcoin-cli"',
-                'MBTC_DATADIR="/data/Bitcoin Core"',
-                'MBTC_CONF="/config/bitcoin.conf"',
-                f'MBTC_NETWORK="{network}"',
+                'BITCOIN_CLI="/usr/bin/bitcoin-cli"',
+                'BITCOIN_DATA_DIR="/data/Bitcoin Core"',
+                'BITCOIN_CONFIG_FILE="/config/bitcoin.conf"',
+                f'BITCOIN_NETWORK="{network}"',
             ]
         )
         + '\n'
     )
     monkeypatch.setattr(server, "CONFIG_FILE", config_file)
 
-    config = server.Config()
-    assert config.load() is True
+    node_config = server.NodeConfig()
+    assert node_config.load() is True
 
-    command = config.get_cli_command()
+    command = node_config.get_cli_command()
     assert command[:3] == [
         "/usr/bin/bitcoin-cli",
         "-datadir=/data/Bitcoin Core",
@@ -50,7 +51,34 @@ def test_config_builds_network_specific_cli_command(
 
 def test_config_load_fails_when_file_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(server, "CONFIG_FILE", tmp_path / "missing.conf")
-    assert server.Config().load() is False
+    assert server.NodeConfig().load() is False
+
+
+def test_config_load_fails_without_bitcoin_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_file = tmp_path / "config.conf"
+    config_file.write_text('BITCOIN_NETWORK="main"\n')
+    monkeypatch.setattr(server, "CONFIG_FILE", config_file)
+
+    assert server.NodeConfig().load() is False
+
+
+def test_cli_info_uses_node_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    node_config = server.NodeConfig()
+    node_config.cli = "/usr/bin/bitcoin-cli"
+    node_config.data_dir = "/bitcoin"
+    node_config.config_file = "/run/bitcoin-peer-map/bitcoin.conf"
+    node_config.network = "main"
+    monkeypatch.setattr(server, "node_config", node_config)
+
+    result = asyncio.run(server.api_cli_info())
+
+    assert result == {
+        "cli_path": "/usr/bin/bitcoin-cli",
+        "datadir": "/bitcoin",
+        "conf": "/run/bitcoin-peer-map/bitcoin.conf",
+        "network": "main",
+        "base_command": "/usr/bin/bitcoin-cli -datadir=/bitcoin -conf=/run/bitcoin-peer-map/bitcoin.conf",
+    }
 
 
 @pytest.mark.parametrize(

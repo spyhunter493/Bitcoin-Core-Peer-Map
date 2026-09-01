@@ -22,6 +22,13 @@
 (function () {
     'use strict';
 
+    const STORAGE_KEYS = Object.freeze({
+        theme: 'bpm.theme',
+        peerTableDisplay: 'bpm.peerTable.display',
+    });
+    const repositoryUrl = document.body.dataset.repositoryUrl;
+    const repositoryDiscussionsUrl = `${repositoryUrl}/discussions`;
+
     // ═══════════════════════════════════════════════════════════
     // CONFIGURATION
     // ═══════════════════════════════════════════════════════════
@@ -432,7 +439,7 @@
 
     /** Save theme choice to localStorage */
     function saveTheme() {
-        try { localStorage.setItem('mbcore_theme', currentTheme); } catch (e) { /* ignore */ }
+        try { localStorage.setItem(STORAGE_KEYS.theme, currentTheme); } catch (e) { /* ignore */ }
     }
 
     /** Load theme from localStorage and apply it.
@@ -440,9 +447,9 @@
      *  values instead of letting the theme overwrite them with its defaults. */
     function loadTheme() {
         try {
-            const saved = localStorage.getItem('mbcore_theme');
+            const saved = localStorage.getItem(STORAGE_KEYS.theme);
             if (saved && THEMES[saved]) {
-                const hasSavedAdv = !!localStorage.getItem('mbcore_adv_display');
+                const hasSavedAdv = !!localStorage.getItem(STORAGE_KEYS.peerTableDisplay);
                 applyTheme(saved, hasSavedAdv ? { preserveAdvSettings: true } : undefined);
             }
         } catch (e) { /* ignore */ }
@@ -542,7 +549,7 @@
     /** Load saved settings from localStorage */
     function loadAdvSettings() {
         try {
-            const raw = localStorage.getItem('mbcore_adv_display');
+            const raw = localStorage.getItem(STORAGE_KEYS.peerTableDisplay);
             if (raw) {
                 const saved = JSON.parse(raw);
                 for (const k of Object.keys(ADV_DEFAULTS)) {
@@ -562,12 +569,12 @@
     /** Save current settings to localStorage */
     function saveAdvSettings() {
         try {
-            localStorage.setItem('mbcore_adv_display', JSON.stringify(advSettings));
+            localStorage.setItem(STORAGE_KEYS.peerTableDisplay, JSON.stringify(advSettings));
         } catch (e) { /* quota exceeded, silently fail */ }
     }
 
     // ═══════════════════════════════════════════════════════════
-    // NETWORK COLOURS (match bitstyle.css --net-* variables)
+    // NETWORK COLOURS (match app.css --net-* variables)
     // ═══════════════════════════════════════════════════════════
 
     const NET_COLORS = {
@@ -3898,9 +3905,9 @@
             worldPolygons = polygons;
             worldReady = true;
             classifyPolarPolygons();
-            console.log(`[vNext] Loaded ${polygons.length} land polygons (${polarPolygons.length} polar)`);
+            console.log(`[Bitcoin Peer Map] Loaded ${polygons.length} land polygons (${polarPolygons.length} polar)`);
         } catch (err) {
-            console.error('[vNext] Failed to load world geometry, using fallback:', err);
+            console.error('[Bitcoin Peer Map] Failed to load world geometry, using fallback:', err);
             // Fallback: minimal hand-traced outlines so the map isn't blank
             worldPolygons = [
                 [[[-130,50],[-125,60],[-115,68],[-95,72],[-80,72],[-65,62],[-55,50],[-60,45],[-68,44],[-75,38],[-82,30],[-90,28],[-97,26],[-105,30],[-118,34],[-125,42],[-130,50]]],
@@ -3928,10 +3935,10 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             lakePolygons = await resp.json();
             lakesReady = true;
-            console.log(`[vNext] Loaded ${lakePolygons.length} lake polygons`);
+            console.log(`[Bitcoin Peer Map] Loaded ${lakePolygons.length} lake polygons`);
         } catch (err) {
             // Lakes are non-critical — map still works without them
-            console.warn('[vNext] Failed to load lake geometry:', err);
+            console.warn('[Bitcoin Peer Map] Failed to load lake geometry:', err);
         }
     }
 
@@ -3946,9 +3953,9 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             borderLines = await resp.json();
             bordersReady = true;
-            console.log(`[vNext] Loaded ${borderLines.length} country border lines`);
+            console.log(`[Bitcoin Peer Map] Loaded ${borderLines.length} country border lines`);
         } catch (err) {
-            console.warn('[vNext] Failed to load country borders:', err);
+            console.warn('[Bitcoin Peer Map] Failed to load country borders:', err);
         }
     }
 
@@ -3963,9 +3970,9 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             stateLines = await resp.json();
             statesReady = true;
-            console.log(`[vNext] Loaded ${stateLines.length} state/province border lines`);
+            console.log(`[Bitcoin Peer Map] Loaded ${stateLines.length} state/province border lines`);
         } catch (err) {
-            console.warn('[vNext] Failed to load state borders:', err);
+            console.warn('[Bitcoin Peer Map] Failed to load state borders:', err);
         }
     }
 
@@ -3980,9 +3987,9 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             cityPoints = await resp.json();
             citiesReady = true;
-            console.log(`[vNext] Loaded ${cityPoints.length} cities`);
+            console.log(`[Bitcoin Peer Map] Loaded ${cityPoints.length} cities`);
         } catch (err) {
-            console.warn('[vNext] Failed to load city data:', err);
+            console.warn('[Bitcoin Peer Map] Failed to load city data:', err);
         }
     }
 
@@ -3997,9 +4004,9 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             countryLabels = await resp.json();
             countryLabelsReady = true;
-            console.log(`[vNext] Loaded ${countryLabels.length} country labels`);
+            console.log(`[Bitcoin Peer Map] Loaded ${countryLabels.length} country labels`);
         } catch (err) {
-            console.warn('[vNext] Failed to load country labels:', err);
+            console.warn('[Bitcoin Peer Map] Failed to load country labels:', err);
         }
     }
 
@@ -4014,9 +4021,9 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             stateLabels = await resp.json();
             stateLabelsReady = true;
-            console.log(`[vNext] Loaded ${stateLabels.length} state/province labels`);
+            console.log(`[Bitcoin Peer Map] Loaded ${stateLabels.length} state/province labels`);
         } catch (err) {
-            console.warn('[vNext] Failed to load state labels:', err);
+            console.warn('[Bitcoin Peer Map] Failed to load state labels:', err);
         }
     }
 
@@ -4174,7 +4181,7 @@
             lastPeerFetchTime = Date.now();
 
         } catch (err) {
-            console.error('[vNext] Failed to fetch peers:', err);
+            console.error('[Bitcoin Peer Map] Failed to fetch peers:', err);
             updateConnectionStatus(false);
         }
     }
@@ -4210,7 +4217,7 @@
                 if (data.changes) {
                     tip += '<div class="update-tooltip-changes">' + data.changes.replace(/\n/g, '<br>') + '</div>';
                 }
-                tip += '<div class="update-tooltip-restart">To update: close this browser tab, press Ctrl+C in the terminal, then re-run <b>./da.sh</b></div>';
+                tip += '<div class="update-tooltip-restart">To update: close this browser tab, press Ctrl+C in the terminal, then re-run <b>./bpm.sh</b></div>';
                 tip += '</div>';
                 updateBadge.innerHTML = 'SYS UPDATE AVAILABLE!' + tip;
 
@@ -4252,7 +4259,7 @@
                         'A new version is available. To upgrade:' +
                     '</div>' +
                     '<div class="update-modal-step"><span class="update-modal-step-num">1.</span> Stop the program in terminal (<b>Ctrl+C</b>)</div>' +
-                    '<div class="update-modal-step"><span class="update-modal-step-num">2.</span> Re-run <b>./da.sh</b></div>' +
+                    '<div class="update-modal-step"><span class="update-modal-step-num">2.</span> Re-run <b>./bpm.sh</b></div>' +
                     '<div class="update-modal-step"><span class="update-modal-step-num">3.</span> Follow the prompts to upgrade</div>' +
                     changesHtml +
                     '<button class="update-modal-dismiss" id="update-modal-dismiss">Got It</button>' +
@@ -4370,7 +4377,7 @@
             }
 
         } catch (err) {
-            console.error('[vNext] Failed to fetch info:', err);
+            console.error('[Bitcoin Peer Map] Failed to fetch info:', err);
         }
     }
 
@@ -7719,7 +7726,7 @@
             const data = await resp.json();
             renderSystemInfoCard(data.system_stats || {});
         } catch (err) {
-            console.error('[vNext] Failed to fetch system stats:', err);
+            console.error('[Bitcoin Peer Map] Failed to fetch system stats:', err);
         }
     }
 
@@ -7769,7 +7776,7 @@
         });
         html += `<div class="dsp-row"><span class="dsp-label" title="Animate donuts to display top 8 ISP or anonymous networks on hover">Display Top ISP/Net</span><label class="dsp-toggle"><input type="checkbox" id="dsp-donut-legends" ${advSettings.showDonutLegends ? 'checked' : ''}><span class="dsp-toggle-slider"></span></label></div>`;
         html += '<button class="dsp-advanced-btn" id="dsp-advanced-btn">Advanced &#9881;</button>';
-        html += '<a class="dsp-feedback-link" href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map/discussions" target="_blank" rel="noopener" title="Click here to open a browser to the repo discussion">Suggestions &amp; Bug Reports &#8599;</a>';
+        html += `<a class="dsp-feedback-link" href="${repositoryDiscussionsUrl}" target="_blank" rel="noopener" title="Open the project discussions">Suggestions &amp; Bug Reports &#8599;</a>`;
         popup.innerHTML = html;
         document.body.appendChild(popup);
         displaySettingsEl = popup;
@@ -8104,7 +8111,7 @@
             const changes = await resp.json();
             renderChangesCard(changes);
         } catch (err) {
-            console.error('[vNext] Failed to fetch changes:', err);
+            console.error('[Bitcoin Peer Map] Failed to fetch changes:', err);
         }
     }
 
@@ -8270,7 +8277,7 @@
 
                 sysStreamRetryDelay = 1000; // reset on success
             } catch (err) {
-                console.error('[vNext] SSE parse error:', err);
+                console.error('[Bitcoin Peer Map] SSE parse error:', err);
             }
         });
 
@@ -8899,9 +8906,9 @@
         }
 
         // GEOIP-DB button in peer panel handle
-        const mbcoreDbPeerBtn = document.getElementById('btn-mbcore-db-peer');
-        if (mbcoreDbPeerBtn) {
-            mbcoreDbPeerBtn.addEventListener('click', (e) => { e.stopPropagation(); openGeoDBDropdown(); });
+        const geoipDbPeerButton = document.getElementById('btn-geoip-db-peer');
+        if (geoipDbPeerButton) {
+            geoipDbPeerButton.addEventListener('click', (e) => { e.stopPropagation(); openGeoDBDropdown(); });
         }
 
         // Topbar gear icon → open primary Map Settings popup

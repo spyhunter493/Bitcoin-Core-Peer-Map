@@ -1,5 +1,5 @@
 #!/bin/bash
-# MBTC-DASH - UI Helper Functions
+# Bitcoin Peer Map - UI Helper Functions
 # Source this file for UI drawing functions
 
 # Get the directory of this script

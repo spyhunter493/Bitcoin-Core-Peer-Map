@@ -1,5 +1,5 @@
 /* ============================================================
-   MBCore vNext — Dark Canvas Dashboard
+   Bitcoin Peer Map - Dark Canvas Dashboard
    Complete UI stylesheet (no sidebar tabs variant)
    ============================================================ */
 
@@ -135,27 +135,18 @@ html, body {
     font-family: var(--font-display);
     font-size: 36px;
     font-weight: 700;
-    letter-spacing: 0.5px;
+    letter-spacing: 0;
     line-height: 1;
     text-decoration: none;
     cursor: pointer;
 }
-.logo:hover .logo-dash { color: var(--text-primary); }
-.logo-m {
+.brand-primary {
     color: var(--logo-primary);
     font-size: 36px;
 }
-.logo-b {
+.brand-accent {
     color: var(--logo-accent);
     font-size: 36px;
-}
-.logo-core {
-    color: var(--logo-primary);
-}
-.logo-dash {
-    color: var(--text-secondary);
-    font-weight: 400;
-    font-size: 22px;
 }
 .version {
     font-size: 12px;
@@ -2885,8 +2876,8 @@ body.donut-focused .map-controls {
         gap: 6px;
     }
     .logo,
-    .logo-m,
-    .logo-b {
+    .brand-primary,
+    .brand-accent {
         font-size: 28px;
         letter-spacing: 0;
     }
@@ -2921,8 +2912,8 @@ body.donut-focused .map-controls {
         padding: 0 10px;
     }
     .logo,
-    .logo-m,
-    .logo-b {
+    .brand-primary,
+    .brand-accent {
         font-size: 24px;
     }
     .version,

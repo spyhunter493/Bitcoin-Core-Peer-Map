@@ -1,27 +1,31 @@
+name: bitcoin-peer-map
+
 services:
-  mbcore:
+  bpm:
     build:
       context: .
+    image: bitcoin-peer-map:local
     restart: unless-stopped
     environment:
       BITCOIN_RPC_HOST: ${BITCOIN_RPC_HOST:-bitcoin}
       BITCOIN_RPC_PORT: ${BITCOIN_RPC_PORT:-8332}
       BITCOIN_RPC_USER: ${BITCOIN_RPC_USER}
       BITCOIN_RPC_PASSWORD: ${BITCOIN_RPC_PASSWORD}
-      MBTC_NETWORK: ${MBTC_NETWORK:-main}
-      MBTC_WEB_PORT: ${MBTC_WEB_PORT:-58333}
-      MBTC_WEB_BIND: ${MBTC_WEB_BIND:-0.0.0.0}
-      GEO_DB_ENABLED: "true"
-      GEO_DB_AUTO_UPDATE: "true"
+      BITCOIN_NETWORK: ${BITCOIN_NETWORK:-main}
+      BPM_LISTEN_PORT: ${BPM_LISTEN_PORT:-58333}
+      BPM_LISTEN_ADDRESS: ${BPM_LISTEN_ADDRESS:-0.0.0.0}
+      BPM_GEOIP_ENABLED: ${BPM_GEOIP_ENABLED:-}
+      BPM_GEOIP_AUTO_UPDATE: ${BPM_GEOIP_AUTO_UPDATE:-}
     ports:
-      - "58333:58333"
+      - "${BPM_HOST_PORT:-58333}:${BPM_LISTEN_PORT:-58333}"
     volumes:
-      - mbcore-data:/opt/mbcore/data
+      - bpm-data:/var/lib/bitcoin-peer-map
     networks:
       - bitcoin-rpc
 
 volumes:
-  mbcore-data:
+  bpm-data:
+    name: bitcoin-peer-map-data
 
 networks:
   bitcoin-rpc:

@@ -1,5 +1,5 @@
 #!/bin/bash
-# MBTC-DASH - Color and Style Definitions
+# Bitcoin Peer Map - Color and Style Definitions
 # Source this file to get access to colors and styling
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -130,7 +130,7 @@ export SPINNER_FRAMES=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '�
 export DOT_FRAMES=('   ' '.  ' '.. ' '...')
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# THEME - Blue (MBTC-DASH)
+# THEME - Blue (Bitcoin Peer Map)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Primary theme colors - BLUE based

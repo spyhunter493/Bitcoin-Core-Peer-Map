@@ -3,7 +3,7 @@
    Isolated logic for the AS Diversity view.
    Delete this file to fully revert the feature.
 
-   Integration points in bitapp.js are marked with [AS-DIVERSITY].
+   Integration points in app.js are marked with [AS-DIVERSITY].
    This module exposes window.ASDiversity for the main app to call.
    ============================================================ */
 
@@ -103,7 +103,7 @@ window.ASDiversity = (function () {
     let summaryPreviewLabel = null;    // Label for active summary hover preview
     let selectedPeerId = null;      // Peer ID that was clicked/selected (persists through hover cycles)
 
-    // Integration hooks (set by bitapp.js)
+    // Integration hooks (set by app.js)
     let _drawLinesForAs = null;    // fn(asNumber, peerIds, color) — draw lines on canvas
     let _drawLinesForAllAs = null; // fn(groups) — draw lines for all AS groups at once
     let _clearAsLines = null;      // fn() — clear AS lines from canvas
@@ -117,7 +117,7 @@ window.ASDiversity = (function () {
     let _hideMapTooltip = null;    // fn() — hide the map peer tooltip
     let _enterPrivateNetMode = null; // fn(targetNet) — enter private network mode
 
-    // Service flag definitions (mirrored from bitapp.js for hover expansion)
+    // Service flag definitions (mirrored from app.js for hover expansion)
     var SERVICE_FLAGS = {
         'NETWORK':          { abbr: 'N',  desc: 'Full chain history (NODE_NETWORK)' },
         'WITNESS':          { abbr: 'W',  desc: 'Segregated Witness support (NODE_WITNESS)' },
@@ -6261,7 +6261,7 @@ window.ASDiversity = (function () {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // PUBLIC API — Called by bitapp.js
+    // PUBLIC API — Called by app.js
     // ═══════════════════════════════════════════════════════════
 
     /** Initialize — cache DOM refs and attach events. Call once on page load. */
@@ -6351,7 +6351,7 @@ window.ASDiversity = (function () {
         isActive = true;
     }
 
-    /** Register integration callbacks from bitapp.js */
+    /** Register integration callbacks from app.js */
     function setHooks(hooks) {
         _drawLinesForAs = hooks.drawLinesForAs || null;
         _drawLinesForAllAs = hooks.drawLinesForAllAs || null;
@@ -7044,7 +7044,7 @@ window.ASDiversity = (function () {
         return getDonutCenter();
     }
 
-    /** Set legends hidden state (called from bitapp.js when toggle changes) */
+    /** Set legends hidden state (called from app.js when toggle changes) */
     function setLegendsHidden(hidden) {
         legendsHidden = !!hidden;
     }

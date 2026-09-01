@@ -1,13 +1,13 @@
 #!/bin/bash
-# MBTC-DASH - Prerequisites Checker
+# Bitcoin Peer Map - Prerequisites Checker
 # Checks for required tools and offers to install missing ones
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/ui.sh"
 
 # Get base directory (parent of lib/)
-MBTC_BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-VENV_DIR="$MBTC_BASE_DIR/venv"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VENV_DIR="$PROJECT_ROOT/venv"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PREREQUISITE DEFINITIONS
@@ -114,16 +114,16 @@ check_venv_health() {
 
     # Directory exists but venv is broken/incomplete
     echo ""
-    echo -e "${T_WARN}${BOLD}MBCore Dashboard virtual environment needs to be reset${RST}"
+    echo -e "${T_WARN}${BOLD}Bitcoin Peer Map virtual environment needs to be reset${RST}"
     echo ""
-    echo "We found an existing MBCore Dashboard virtual environment, but it appears"
+    echo "We found an existing Bitcoin Peer Map virtual environment, but it appears"
     echo "to be incomplete (possibly from a previous installation that didn't finish)."
     echo ""
     echo "This only affects the ./venv folder inside this project directory."
     echo "Your other Python environments are not affected."
     echo ""
 
-    if prompt_yn "Reset the MBCore Dashboard virtual environment?"; then
+    if prompt_yn "Reset the Bitcoin Peer Map virtual environment?"; then
         msg_info "Removing incomplete virtual environment..."
         rm -rf "$VENV_DIR"
         if [[ -d "$VENV_DIR" ]]; then
@@ -145,7 +145,7 @@ check_venv_health() {
 
 # Create virtual environment
 create_venv() {
-    msg_info "Creating MBCore virtual environment in $(basename "$MBTC_BASE_DIR")/venv/..."
+    msg_info "Creating Bitcoin Peer Map virtual environment in $(basename "$PROJECT_ROOT")/venv/..."
 
     # Try to create venv and capture any error
     local venv_error
@@ -188,7 +188,7 @@ create_venv() {
                 pkg_name="python3-venv"
             fi
 
-            if prompt_yn "Install $pkg_name for MBCore now?"; then
+            if prompt_yn "Install $pkg_name for Bitcoin Peer Map now?"; then
                 local install_cmd="apt install -y $pkg_name"
 
                 # Add sudo if needed
@@ -651,7 +651,7 @@ run_python_check() {
         # Create venv if needed
         if [[ $need_venv -eq 1 ]]; then
             echo ""
-            echo -e "${T_WARN}${BOLD}Creating MBCore virtual environment...${RST}"
+            echo -e "${T_WARN}${BOLD}Creating Bitcoin Peer Map virtual environment...${RST}"
             echo -e "${T_DIM}──────────────────────────────────${RST}"
             if ! create_venv; then
                 msg_err "Cannot proceed without virtual environment"
@@ -670,7 +670,7 @@ run_python_check() {
         local terminal_failed=0
         if [[ $need_terminal -eq 1 ]]; then
             echo ""
-            echo -e "Installing packages for MBCore..."
+            echo -e "Installing packages for Bitcoin Peer Map..."
             echo -e "${T_DIM}───────────────────────────────────${RST}"
             for item in "${missing_terminal[@]}"; do
                 IFS='|' read -r pkg desc <<< "$item"
@@ -691,7 +691,7 @@ run_python_check() {
         local web_failed=0
         if [[ $need_web -eq 1 ]]; then
             echo ""
-            echo -e "Installing MBCore local web packages..."
+            echo -e "Installing Bitcoin Peer Map local web packages..."
             echo -e "${T_DIM}────────────────────────────────────${RST}"
             for item in "${missing_web[@]}"; do
                 IFS='|' read -r pkg desc <<< "$item"

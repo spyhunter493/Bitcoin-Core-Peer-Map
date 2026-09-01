@@ -18,12 +18,12 @@ source "$test_dir/lib/config.sh"
 
 marker="$test_dir/executed"
 unknown_marker="$test_dir/unknown-executed"
-printf 'MBTC_CLI_PATH="/bin/echo"\nMBTC_DATADIR="$(touch %s)"\nUNKNOWN_KEY="$(touch %s)"\nMBTC_NETWORK="main"\n' \
-    "$marker" "$unknown_marker" > "$MBTC_CACHE_FILE"
+printf 'BITCOIN_CLI="/bin/echo"\nBITCOIN_DATA_DIR="$(touch %s)"\nUNKNOWN_KEY="$(touch %s)"\nBITCOIN_NETWORK="main"\n' \
+    "$marker" "$unknown_marker" > "$APP_CONFIG_FILE"
 load_config
 
 printf -v expected_datadir '$(touch %s)' "$marker"
-[[ "$MBTC_DATADIR" == "$expected_datadir" ]]
+[[ "$BITCOIN_DATA_DIR" == "$expected_datadir" ]]
 [[ ! -e "$marker" && ! -e "$unknown_marker" ]]
 [[ -z "${UNKNOWN_KEY+x}" ]]
 
@@ -32,25 +32,25 @@ args_file="$test_dir/args"
 printf '%s\n' '#!/bin/bash' 'printf "%s\0" "$@" > "$CONFIG_TEST_ARGS_FILE"' > "$helper"
 chmod 700 "$helper"
 export CONFIG_TEST_ARGS_FILE="$args_file"
-MBTC_CLI_PATH="$helper"
-MBTC_DATADIR="$test_dir/data dir;touch $marker"
-MBTC_CONF="$test_dir/conf file \$(touch $marker)"
-MBTC_NETWORK=signet
-run_cli getblockchaininfo 'argument with spaces'
+BITCOIN_CLI="$helper"
+BITCOIN_DATA_DIR="$test_dir/data dir;touch $marker"
+BITCOIN_CONFIG_FILE="$test_dir/conf file \$(touch $marker)"
+BITCOIN_NETWORK=signet
+run_bitcoin_cli getblockchaininfo 'argument with spaces'
 
 mapfile -d '' -t args < "$args_file"
 [[ ${#args[@]} -eq 5 ]]
-[[ "${args[0]}" == "-datadir=$MBTC_DATADIR" ]]
-[[ "${args[1]}" == "-conf=$MBTC_CONF" ]]
+[[ "${args[0]}" == "-datadir=$BITCOIN_DATA_DIR" ]]
+[[ "${args[1]}" == "-conf=$BITCOIN_CONFIG_FILE" ]]
 [[ "${args[2]}" == "-signet" ]]
 [[ "${args[3]}" == "getblockchaininfo" ]]
 [[ "${args[4]}" == "argument with spaces" ]]
 [[ ! -e "$marker" ]]
 
-printf 'MBTC_CLI_PATH="/bin/true"\n' > "$MBTC_CACHE_FILE"
-before_hash=$(sha256sum "$MBTC_CACHE_FILE")
-! set_config MBTC_NOT_SUPPORTED value
-! set_config GEO_DB_ENABLED $'true"\nMBTC_CLI_PATH="/tmp/injected-cli'
-[[ "$(sha256sum "$MBTC_CACHE_FILE")" == "$before_hash" ]]
+printf 'BITCOIN_CLI="/bin/true"\n' > "$APP_CONFIG_FILE"
+before_hash=$(sha256sum "$APP_CONFIG_FILE")
+! set_config BPM_NOT_SUPPORTED value
+! set_config BPM_GEOIP_ENABLED $'true"\nBITCOIN_CLI="/tmp/injected-cli'
+[[ "$(sha256sum "$APP_CONFIG_FILE")" == "$before_hash" ]]
 
 echo "Shell configuration tests passed"

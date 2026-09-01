@@ -1,3 +1,5 @@
+Unreleased - Rebranded internals for Bitcoin Peer Map. Renamed the native launcher, Python package, frontend assets, configuration keys, browser storage, Docker service, image, user, paths, and persistent volume. This is a clean break from the previous internal naming and starts with fresh application data.
+
 v7.8.1 — README.md minor edit
 
 v7.8.0 — Fixed donut hover overriding peer selection. When a peer was selected from the peer list, hovering over the donut chart would draw lines to all peers in the hovered AS segment, overriding the single-peer focus. Donut hover and leave events now fully block when a peer detail panel is active, matching the existing behavior when navigating through donut sub-menus.

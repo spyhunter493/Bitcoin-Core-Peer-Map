@@ -1,15 +1,15 @@
 #!/bin/bash
-# MBTC-DASH - Bitcoin Core Detection Script
+# Bitcoin Peer Map - Bitcoin Core Detection Script
 # Detects Bitcoin Core installation, datadir, conf, and auth settings
 
 # Don't use set -e - we handle errors ourselves
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MBTC_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Source libraries
-source "$MBTC_DIR/lib/ui.sh"
-source "$MBTC_DIR/lib/config.sh"
+source "$PROJECT_ROOT/lib/ui.sh"
+source "$PROJECT_ROOT/lib/config.sh"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -46,7 +46,7 @@ CONF_CANDIDATES=(
 )
 
 # Track if bitcoind is running
-MBTC_RUNNING=0
+node_running=0
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CTRL+C HANDLING
@@ -87,15 +87,15 @@ display_cached_config() {
     echo ""
     echo -e "${T_SECONDARY}${BOLD}Cached Configuration:${RST}"
     echo ""
-    print_kv "Bitcoin CLI" "${MBTC_CLI_PATH:-not set}" 18
-    print_kv "Data Directory" "${MBTC_DATADIR:-not set}" 18
-    print_kv "Config File" "${MBTC_CONF:-not set}" 18
-    print_kv "Network" "${MBTC_NETWORK:-main}" 18
-    print_kv "RPC Host:Port" "${MBTC_RPC_HOST:-127.0.0.1}:${MBTC_RPC_PORT:-8332}" 18
-    if [[ -n "$MBTC_COOKIE_PATH" ]]; then
-        print_kv "Auth" "Cookie ($MBTC_COOKIE_PATH)" 18
-    elif [[ -n "$MBTC_RPC_USER" ]]; then
-        print_kv "Auth" "User/Pass ($MBTC_RPC_USER)" 18
+    print_kv "Bitcoin CLI" "${BITCOIN_CLI:-not set}" 18
+    print_kv "Data Directory" "${BITCOIN_DATA_DIR:-not set}" 18
+    print_kv "Config File" "${BITCOIN_CONFIG_FILE:-not set}" 18
+    print_kv "Network" "${BITCOIN_NETWORK:-main}" 18
+    print_kv "RPC Host:Port" "${BITCOIN_RPC_HOST:-127.0.0.1}:${BITCOIN_RPC_PORT:-8332}" 18
+    if [[ -n "$BITCOIN_RPC_COOKIE_FILE" ]]; then
+        print_kv "Auth" "Cookie ($BITCOIN_RPC_COOKIE_FILE)" 18
+    elif [[ -n "$BITCOIN_RPC_USER" ]]; then
+        print_kv "Auth" "User/Pass ($BITCOIN_RPC_USER)" 18
     fi
     echo ""
 }
@@ -109,30 +109,30 @@ detect_running_process() {
     pinfo=$(pgrep -a bitcoind 2>/dev/null | head -1) || return 1
     [[ -z "$pinfo" ]] && return 1
 
-    MBTC_RUNNING=1
+    node_running=1
 
     local args
     args=$(echo "$pinfo" | cut -d' ' -f3-)
 
     # Parse arguments from running process
-    [[ "$args" =~ -datadir=([^[:space:]]+) ]] && MBTC_DATADIR="${BASH_REMATCH[1]}"
-    [[ "$args" =~ -conf=([^[:space:]]+) ]] && MBTC_CONF="${BASH_REMATCH[1]}"
+    [[ "$args" =~ -datadir=([^[:space:]]+) ]] && BITCOIN_DATA_DIR="${BASH_REMATCH[1]}"
+    [[ "$args" =~ -conf=([^[:space:]]+) ]] && BITCOIN_CONFIG_FILE="${BASH_REMATCH[1]}"
 
     if [[ "$args" =~ -testnet ]]; then
-        MBTC_NETWORK="test"
-        MBTC_RPC_PORT="18332"
+        BITCOIN_NETWORK="test"
+        BITCOIN_RPC_PORT="18332"
     elif [[ "$args" =~ -signet ]]; then
-        MBTC_NETWORK="signet"
-        MBTC_RPC_PORT="38332"
+        BITCOIN_NETWORK="signet"
+        BITCOIN_RPC_PORT="38332"
     elif [[ "$args" =~ -regtest ]]; then
-        MBTC_NETWORK="regtest"
-        MBTC_RPC_PORT="18443"
+        BITCOIN_NETWORK="regtest"
+        BITCOIN_RPC_PORT="18443"
     fi
 
-    [[ "$args" =~ -rpcport=([0-9]+) ]] && MBTC_RPC_PORT="${BASH_REMATCH[1]}"
-    [[ "$args" =~ -rpcuser=([^[:space:]]+) ]] && MBTC_RPC_USER="${BASH_REMATCH[1]}"
-    [[ "$args" =~ -rpcpassword=([^[:space:]]+) ]] && MBTC_RPC_PASS="${BASH_REMATCH[1]}"
-    [[ "$args" =~ -rpccookiefile=([^[:space:]]+) ]] && MBTC_COOKIE_PATH="${BASH_REMATCH[1]}"
+    [[ "$args" =~ -rpcport=([0-9]+) ]] && BITCOIN_RPC_PORT="${BASH_REMATCH[1]}"
+    [[ "$args" =~ -rpcuser=([^[:space:]]+) ]] && BITCOIN_RPC_USER="${BASH_REMATCH[1]}"
+    [[ "$args" =~ -rpcpassword=([^[:space:]]+) ]] && BITCOIN_RPC_PASSWORD="${BASH_REMATCH[1]}"
+    [[ "$args" =~ -rpccookiefile=([^[:space:]]+) ]] && BITCOIN_RPC_COOKIE_FILE="${BASH_REMATCH[1]}"
 
     return 0
 }
@@ -154,10 +154,10 @@ detect_systemd_service() {
         local exec_start
         exec_start=$(systemctl show "$service" --property=ExecStart 2>/dev/null)
 
-        [[ "$exec_start" =~ -datadir=([^[:space:]\;]+) ]] && MBTC_DATADIR="${BASH_REMATCH[1]}"
-        [[ "$exec_start" =~ -conf=([^[:space:]\;]+) ]] && MBTC_CONF="${BASH_REMATCH[1]}"
+        [[ "$exec_start" =~ -datadir=([^[:space:]\;]+) ]] && BITCOIN_DATA_DIR="${BASH_REMATCH[1]}"
+        [[ "$exec_start" =~ -conf=([^[:space:]\;]+) ]] && BITCOIN_CONFIG_FILE="${BASH_REMATCH[1]}"
 
-        [[ -n "$MBTC_DATADIR" || -n "$MBTC_CONF" ]] && return 0
+        [[ -n "$BITCOIN_DATA_DIR" || -n "$BITCOIN_CONFIG_FILE" ]] && return 0
     done
 
     return 1
@@ -174,8 +174,8 @@ detect_bitcoin_cli() {
     local exit_code=$?
 
     if [[ $exit_code -eq 0 ]]; then
-        MBTC_CLI_PATH=$(command -v bitcoin-cli)
-        MBTC_VERSION=$(echo "$result" | head -1 | grep -oP 'v[\d.]+' || echo "unknown")
+        BITCOIN_CLI=$(command -v bitcoin-cli)
+        BITCOIN_CLI_VERSION=$(echo "$result" | head -1 | grep -oP 'v[\d.]+' || echo "unknown")
         return 0
     fi
 
@@ -186,8 +186,8 @@ detect_bitcoin_cli() {
                 local test_result
                 test_result=$("$dir/bitcoin-cli" --version 2>&1)
                 if [[ $? -eq 0 ]]; then
-                    MBTC_CLI_PATH="$dir/bitcoin-cli"
-                    MBTC_VERSION=$(echo "$test_result" | head -1 | grep -oP 'v[\d.]+' || echo "unknown")
+                    BITCOIN_CLI="$dir/bitcoin-cli"
+                    BITCOIN_CLI_VERSION=$(echo "$test_result" | head -1 | grep -oP 'v[\d.]+' || echo "unknown")
                     return 0
                 fi
             fi
@@ -196,8 +196,8 @@ detect_bitcoin_cli() {
     fi
 
     # Some other error but cli exists
-    MBTC_CLI_PATH=$(command -v bitcoin-cli 2>/dev/null)
-    [[ -n "$MBTC_CLI_PATH" ]] && return 0
+    BITCOIN_CLI=$(command -v bitcoin-cli 2>/dev/null)
+    [[ -n "$BITCOIN_CLI" ]] && return 0
 
     return 1
 }
@@ -228,21 +228,21 @@ validate_datadir() {
 }
 
 find_conf_file() {
-    [[ -n "$MBTC_CONF" ]] && validate_conf_file "$MBTC_CONF" && return 0
+    [[ -n "$BITCOIN_CONFIG_FILE" ]] && validate_conf_file "$BITCOIN_CONFIG_FILE" && return 0
 
-    if [[ -n "$MBTC_DATADIR" && -f "$MBTC_DATADIR/bitcoin.conf" ]]; then
-        MBTC_CONF="$MBTC_DATADIR/bitcoin.conf"
+    if [[ -n "$BITCOIN_DATA_DIR" && -f "$BITCOIN_DATA_DIR/bitcoin.conf" ]]; then
+        BITCOIN_CONFIG_FILE="$BITCOIN_DATA_DIR/bitcoin.conf"
         return 0
     fi
 
     for conf in "${CONF_CANDIDATES[@]}"; do
         if validate_conf_file "$conf"; then
-            MBTC_CONF="$conf"
-            if [[ -z "$MBTC_DATADIR" ]]; then
+            BITCOIN_CONFIG_FILE="$conf"
+            if [[ -z "$BITCOIN_DATA_DIR" ]]; then
                 local dir
                 dir=$(dirname "$conf")
                 if validate_datadir "$dir"; then
-                    MBTC_DATADIR="$dir"
+                    BITCOIN_DATA_DIR="$dir"
                 fi
             fi
             return 0
@@ -264,15 +264,15 @@ parse_conf_file() {
         value=$(echo "$value" | xargs)
 
         case "$key" in
-            datadir)     [[ -z "$MBTC_DATADIR" ]] && MBTC_DATADIR="$value" ;;
-            testnet)     [[ "$value" == "1" ]] && MBTC_NETWORK="test" && MBTC_RPC_PORT="18332" ;;
-            signet)      [[ "$value" == "1" ]] && MBTC_NETWORK="signet" && MBTC_RPC_PORT="38332" ;;
-            regtest)     [[ "$value" == "1" ]] && MBTC_NETWORK="regtest" && MBTC_RPC_PORT="18443" ;;
-            rpcuser)     MBTC_RPC_USER="$value" ;;
-            rpcpassword) MBTC_RPC_PASS="$value" ;;
-            rpcport)     MBTC_RPC_PORT="$value" ;;
-            rpcbind)     [[ "$MBTC_RPC_HOST" == "127.0.0.1" ]] && MBTC_RPC_HOST="$value" ;;
-            rpccookiefile) MBTC_COOKIE_PATH="$value" ;;
+            datadir)     [[ -z "$BITCOIN_DATA_DIR" ]] && BITCOIN_DATA_DIR="$value" ;;
+            testnet)     [[ "$value" == "1" ]] && BITCOIN_NETWORK="test" && BITCOIN_RPC_PORT="18332" ;;
+            signet)      [[ "$value" == "1" ]] && BITCOIN_NETWORK="signet" && BITCOIN_RPC_PORT="38332" ;;
+            regtest)     [[ "$value" == "1" ]] && BITCOIN_NETWORK="regtest" && BITCOIN_RPC_PORT="18443" ;;
+            rpcuser)     BITCOIN_RPC_USER="$value" ;;
+            rpcpassword) BITCOIN_RPC_PASSWORD="$value" ;;
+            rpcport)     BITCOIN_RPC_PORT="$value" ;;
+            rpcbind)     [[ "$BITCOIN_RPC_HOST" == "127.0.0.1" ]] && BITCOIN_RPC_HOST="$value" ;;
+            rpccookiefile) BITCOIN_RPC_COOKIE_FILE="$value" ;;
         esac
     done < "$conf"
     return 0
@@ -318,8 +318,8 @@ search_conf_file() {
     fi
 
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice < i )); then
-        MBTC_CONF="${found_array[$((choice-1))]}"
-        msg_ok "Selected: $MBTC_CONF"
+        BITCOIN_CONFIG_FILE="${found_array[$((choice-1))]}"
+        msg_ok "Selected: $BITCOIN_CONFIG_FILE"
         return 0
     fi
 
@@ -332,25 +332,25 @@ search_conf_file() {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 find_datadir() {
-    [[ -n "$MBTC_DATADIR" ]] && validate_datadir "$MBTC_DATADIR" && return 0
+    [[ -n "$BITCOIN_DATA_DIR" ]] && validate_datadir "$BITCOIN_DATA_DIR" && return 0
 
-    if [[ -n "$MBTC_CONF" ]]; then
+    if [[ -n "$BITCOIN_CONFIG_FILE" ]]; then
         local conf_dir
-        conf_dir=$(dirname "$MBTC_CONF")
+        conf_dir=$(dirname "$BITCOIN_CONFIG_FILE")
         if validate_datadir "$conf_dir"; then
-            MBTC_DATADIR="$conf_dir"
+            BITCOIN_DATA_DIR="$conf_dir"
             return 0
         fi
     fi
 
     if validate_datadir "$HOME/.bitcoin"; then
-        MBTC_DATADIR="$HOME/.bitcoin"
+        BITCOIN_DATA_DIR="$HOME/.bitcoin"
         return 0
     fi
 
     for dir in "${DATADIR_CANDIDATES[@]}"; do
         if validate_datadir "$dir"; then
-            MBTC_DATADIR="$dir"
+            BITCOIN_DATA_DIR="$dir"
             return 0
         fi
     done
@@ -359,7 +359,7 @@ find_datadir() {
         [[ -d "$mount" ]] || continue
         for subdir in bitcoin .bitcoin bitcoind; do
             if validate_datadir "$mount/$subdir"; then
-                MBTC_DATADIR="$mount/$subdir"
+                BITCOIN_DATA_DIR="$mount/$subdir"
                 return 0
             fi
         done
@@ -410,10 +410,10 @@ search_datadir() {
     fi
 
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice < i )); then
-        MBTC_DATADIR="${found_array[$((choice-1))]}"
+        BITCOIN_DATA_DIR="${found_array[$((choice-1))]}"
         echo ""
-        if prompt_yn "Use $MBTC_DATADIR as data directory?"; then
-            msg_ok "Selected: $MBTC_DATADIR"
+        if prompt_yn "Use $BITCOIN_DATA_DIR as data directory?"; then
+            msg_ok "Selected: $BITCOIN_DATA_DIR"
             return 0
         else
             return 1
@@ -441,17 +441,17 @@ get_network_datadir() {
 }
 
 find_cookie() {
-    [[ -n "$MBTC_COOKIE_PATH" && -f "$MBTC_COOKIE_PATH" ]] && return 0
+    [[ -n "$BITCOIN_RPC_COOKIE_FILE" && -f "$BITCOIN_RPC_COOKIE_FILE" ]] && return 0
 
     local effective_datadir
-    effective_datadir=$(get_network_datadir "$MBTC_DATADIR" "$MBTC_NETWORK")
+    effective_datadir=$(get_network_datadir "$BITCOIN_DATA_DIR" "$BITCOIN_NETWORK")
 
     if [[ -f "$effective_datadir/.cookie" ]]; then
-        MBTC_COOKIE_PATH="$effective_datadir/.cookie"
+        BITCOIN_RPC_COOKIE_FILE="$effective_datadir/.cookie"
         return 0
     fi
 
-    [[ -f "$MBTC_DATADIR/.cookie" ]] && MBTC_COOKIE_PATH="$MBTC_DATADIR/.cookie" && return 0
+    [[ -f "$BITCOIN_DATA_DIR/.cookie" ]] && BITCOIN_RPC_COOKIE_FILE="$BITCOIN_DATA_DIR/.cookie" && return 0
 
     return 1
 }
@@ -502,14 +502,14 @@ manual_enter_conf() {
     input="${input/#\~/$HOME}"
 
     if [[ -f "$input" ]]; then
-        MBTC_CONF="$input"
-        msg_ok "Config file set: $MBTC_CONF"
+        BITCOIN_CONFIG_FILE="$input"
+        msg_ok "Config file set: $BITCOIN_CONFIG_FILE"
 
         local conf_dir
         conf_dir=$(dirname "$input")
-        if [[ -z "$MBTC_DATADIR" ]] && validate_datadir "$conf_dir"; then
-            MBTC_DATADIR="$conf_dir"
-            msg_ok "Also found datadir: $MBTC_DATADIR"
+        if [[ -z "$BITCOIN_DATA_DIR" ]] && validate_datadir "$conf_dir"; then
+            BITCOIN_DATA_DIR="$conf_dir"
+            msg_ok "Also found datadir: $BITCOIN_DATA_DIR"
         fi
         return 0
     else
@@ -526,8 +526,8 @@ manual_enter_datadir() {
 
     # Try to detect a default datadir
     local default_datadir=""
-    if [[ -n "$MBTC_CONF" ]]; then
-        default_datadir=$(dirname "$MBTC_CONF")
+    if [[ -n "$BITCOIN_CONFIG_FILE" ]]; then
+        default_datadir=$(dirname "$BITCOIN_CONFIG_FILE")
     elif [[ -d "/srv/bitcoin" ]]; then
         default_datadir="/srv/bitcoin"
     elif [[ -d "$HOME/.bitcoin" ]]; then
@@ -560,18 +560,18 @@ manual_enter_datadir() {
     input="${input/#\~/$HOME}"
 
     if validate_datadir "$input"; then
-        MBTC_DATADIR="$input"
-        msg_ok "Data directory set: $MBTC_DATADIR"
+        BITCOIN_DATA_DIR="$input"
+        msg_ok "Data directory set: $BITCOIN_DATA_DIR"
 
-        if [[ -z "$MBTC_CONF" && -f "$input/bitcoin.conf" ]]; then
-            MBTC_CONF="$input/bitcoin.conf"
-            msg_ok "Also found config: $MBTC_CONF"
+        if [[ -z "$BITCOIN_CONFIG_FILE" && -f "$input/bitcoin.conf" ]]; then
+            BITCOIN_CONFIG_FILE="$input/bitcoin.conf"
+            msg_ok "Also found config: $BITCOIN_CONFIG_FILE"
         fi
         return 0
     elif [[ -d "$input" ]]; then
         msg_warn "Directory exists but doesn't look like a Bitcoin datadir"
         if prompt_yn "Use it anyway?"; then
-            MBTC_DATADIR="$input"
+            BITCOIN_DATA_DIR="$input"
             return 0
         fi
         return 1
@@ -590,37 +590,37 @@ display_detection_results() {
     echo -e "${T_SECONDARY}${BOLD}Found Settings:${RST}"
     echo ""
 
-    print_kv "Bitcoin CLI" "${MBTC_CLI_PATH:-not found}" 18
-    print_kv "Version" "${MBTC_VERSION:-unknown}" 18
-    print_kv "Data Directory" "${MBTC_DATADIR:-not found}" 18
-    print_kv "Config File" "${MBTC_CONF:-not found}" 18
-    print_kv "Network" "${MBTC_NETWORK}" 18
-    print_kv "RPC Host:Port" "${MBTC_RPC_HOST}:${MBTC_RPC_PORT}" 18
+    print_kv "Bitcoin CLI" "${BITCOIN_CLI:-not found}" 18
+    print_kv "Version" "${BITCOIN_CLI_VERSION:-unknown}" 18
+    print_kv "Data Directory" "${BITCOIN_DATA_DIR:-not found}" 18
+    print_kv "Config File" "${BITCOIN_CONFIG_FILE:-not found}" 18
+    print_kv "Network" "${BITCOIN_NETWORK}" 18
+    print_kv "RPC Host:Port" "${BITCOIN_RPC_HOST}:${BITCOIN_RPC_PORT}" 18
 
-    if [[ -n "$MBTC_COOKIE_PATH" && -f "$MBTC_COOKIE_PATH" ]]; then
+    if [[ -n "$BITCOIN_RPC_COOKIE_FILE" && -f "$BITCOIN_RPC_COOKIE_FILE" ]]; then
         print_kv "Auth Method" "Cookie" 18
-        print_kv "Cookie File" "$MBTC_COOKIE_PATH" 18
-    elif [[ -n "$MBTC_RPC_USER" ]]; then
+        print_kv "Cookie File" "$BITCOIN_RPC_COOKIE_FILE" 18
+    elif [[ -n "$BITCOIN_RPC_USER" ]]; then
         print_kv "Auth Method" "User/Password" 18
-        print_kv "RPC User" "$MBTC_RPC_USER" 18
+        print_kv "RPC User" "$BITCOIN_RPC_USER" 18
     else
         print_kv "Auth Method" "Default" 18
     fi
 
-    if [[ "$MBTC_RUNNING" -eq 1 ]]; then
+    if [[ "$node_running" -eq 1 ]]; then
         echo ""
         echo -e "  ${T_SUCCESS}${SYM_CHECK} bitcoind is running${RST}"
     fi
 
     echo ""
     echo -e "${T_DIM}Full CLI command:${RST}"
-    echo -e "  ${BWHITE}$(get_cli_command)${RST}"
+    echo -e "  ${BWHITE}$(get_bitcoin_cli_command)${RST}"
     echo ""
 }
 
 confirm_detection_results() {
     # Auto mode: skip prompt and auto-save
-    if [[ "${MBTC_AUTO_DETECT:-0}" == "1" ]]; then
+    if [[ "${BPM_AUTO_DETECT:-0}" == "1" ]]; then
         save_config
         msg_ok "Configuration saved!"
         return 0
@@ -656,7 +656,7 @@ confirm_detection_results() {
                     [[ $result -eq 2 ]] && return 1
                 done
 
-                if [[ -z "$MBTC_DATADIR" ]]; then
+                if [[ -z "$BITCOIN_DATA_DIR" ]]; then
                     while true; do
                         manual_enter_datadir
                         local result=$?
@@ -669,15 +669,15 @@ confirm_detection_results() {
                 echo ""
                 echo -e "${T_SECONDARY}${BOLD}Auto-detecting remaining settings...${RST}"
                 detect_bitcoin_cli
-                if [[ -n "$MBTC_CONF" ]]; then
-                    parse_conf_file "$MBTC_CONF"
+                if [[ -n "$BITCOIN_CONFIG_FILE" ]]; then
+                    parse_conf_file "$BITCOIN_CONFIG_FILE"
                 fi
                 find_cookie
-                if [[ -n "$MBTC_CLI_PATH" ]]; then
-                    msg_ok "Found bitcoin-cli: $MBTC_CLI_PATH"
+                if [[ -n "$BITCOIN_CLI" ]]; then
+                    msg_ok "Found bitcoin-cli: $BITCOIN_CLI"
                 fi
-                if [[ -n "$MBTC_COOKIE_PATH" && -f "$MBTC_COOKIE_PATH" ]]; then
-                    msg_ok "Found cookie auth: $MBTC_COOKIE_PATH"
+                if [[ -n "$BITCOIN_RPC_COOKIE_FILE" && -f "$BITCOIN_RPC_COOKIE_FILE" ]]; then
+                    msg_ok "Found cookie auth: $BITCOIN_RPC_COOKIE_FILE"
                 fi
 
                 # Test RPC
@@ -745,8 +745,8 @@ run_detection() {
                 msg_ok "Using cached configuration"
                 detect_bitcoin_cli
                 find_cookie
-                if [[ -n "$MBTC_CONF" ]]; then
-                    parse_conf_file "$MBTC_CONF"
+                if [[ -n "$BITCOIN_CONFIG_FILE" ]]; then
+                    parse_conf_file "$BITCOIN_CONFIG_FILE"
                 fi
                 goto_rpc_test=1
                 ;;
@@ -784,7 +784,7 @@ run_detection() {
             [[ $result -eq 2 ]] && break
         done
 
-        if [[ -z "$MBTC_DATADIR" ]]; then
+        if [[ -z "$BITCOIN_DATA_DIR" ]]; then
             while true; do
                 manual_enter_datadir
                 local result=$?
@@ -804,16 +804,16 @@ run_detection() {
         start_spinner "Scanning for bitcoind process"
         if detect_running_process; then
             stop_spinner 0 "Found running bitcoind (PID: $(pgrep bitcoind | head -1))"
-            [[ -n "$MBTC_DATADIR" ]] && msg_ok "Detected datadir: $MBTC_DATADIR"
-            [[ -n "$MBTC_CONF" ]] && msg_ok "Detected conf: $MBTC_CONF"
+            [[ -n "$BITCOIN_DATA_DIR" ]] && msg_ok "Detected datadir: $BITCOIN_DATA_DIR"
+            [[ -n "$BITCOIN_CONFIG_FILE" ]] && msg_ok "Detected conf: $BITCOIN_CONFIG_FILE"
         else
             stop_spinner 0 "bitcoind not running"
 
             start_spinner "Checking systemd services"
             if detect_systemd_service; then
                 stop_spinner 0 "Found configuration from systemd service"
-                [[ -n "$MBTC_DATADIR" ]] && msg_ok "Datadir: $MBTC_DATADIR"
-                [[ -n "$MBTC_CONF" ]] && msg_ok "Conf: $MBTC_CONF"
+                [[ -n "$BITCOIN_DATA_DIR" ]] && msg_ok "Datadir: $BITCOIN_DATA_DIR"
+                [[ -n "$BITCOIN_CONFIG_FILE" ]] && msg_ok "Conf: $BITCOIN_CONFIG_FILE"
             else
                 stop_spinner 0 "No systemd bitcoin service found"
             fi
@@ -827,7 +827,7 @@ run_detection() {
 
         start_spinner "Searching common locations"
         if find_conf_file; then
-            stop_spinner 0 "Found: $MBTC_CONF"
+            stop_spinner 0 "Found: $BITCOIN_CONFIG_FILE"
         else
             stop_spinner 1 "Config file not found in common locations"
 
@@ -857,10 +857,10 @@ run_detection() {
             esac
         fi
 
-        if [[ -n "$MBTC_CONF" && -f "$MBTC_CONF" ]]; then
+        if [[ -n "$BITCOIN_CONFIG_FILE" && -f "$BITCOIN_CONFIG_FILE" ]]; then
             msg_info "Parsing config file..."
-            parse_conf_file "$MBTC_CONF"
-            [[ -n "$MBTC_DATADIR" ]] && msg_ok "Found datadir in config: $MBTC_DATADIR"
+            parse_conf_file "$BITCOIN_CONFIG_FILE"
+            [[ -n "$BITCOIN_DATA_DIR" ]] && msg_ok "Found datadir in config: $BITCOIN_DATA_DIR"
         fi
         echo ""
 
@@ -869,12 +869,12 @@ run_detection() {
         # ─────────────────────────────────────────────────────────────────────
         echo -e "${T_DIM}Step 4: Locating data directory...${RST}"
 
-        if [[ -n "$MBTC_DATADIR" ]] && validate_datadir "$MBTC_DATADIR"; then
-            msg_ok "Already found: $MBTC_DATADIR"
+        if [[ -n "$BITCOIN_DATA_DIR" ]] && validate_datadir "$BITCOIN_DATA_DIR"; then
+            msg_ok "Already found: $BITCOIN_DATA_DIR"
         else
             start_spinner "Searching common locations"
             if find_datadir; then
-                stop_spinner 0 "Found: $MBTC_DATADIR"
+                stop_spinner 0 "Found: $BITCOIN_DATA_DIR"
             else
                 stop_spinner 1 "Data directory not found in common locations"
 
@@ -913,7 +913,7 @@ run_detection() {
 
         start_spinner "Checking bitcoin-cli"
         if detect_bitcoin_cli; then
-            stop_spinner 0 "Found: $MBTC_CLI_PATH ($MBTC_VERSION)"
+            stop_spinner 0 "Found: $BITCOIN_CLI ($BITCOIN_CLI_VERSION)"
         else
             stop_spinner 1 "bitcoin-cli not found"
             msg_err "Bitcoin Core does not appear to be installed"
@@ -928,9 +928,9 @@ run_detection() {
     echo -e "${T_DIM}Step 6: Checking authentication...${RST}"
 
     find_cookie
-    if [[ -n "$MBTC_COOKIE_PATH" && -f "$MBTC_COOKIE_PATH" ]]; then
-        msg_ok "Cookie auth: $MBTC_COOKIE_PATH"
-    elif [[ -n "$MBTC_RPC_USER" ]]; then
+    if [[ -n "$BITCOIN_RPC_COOKIE_FILE" && -f "$BITCOIN_RPC_COOKIE_FILE" ]]; then
+        msg_ok "Cookie auth: $BITCOIN_RPC_COOKIE_FILE"
+    elif [[ -n "$BITCOIN_RPC_USER" ]]; then
         msg_ok "User/password auth configured"
     else
         msg_info "Using default authentication"
@@ -968,7 +968,7 @@ run_detection() {
 # If run directly (not sourced)
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     run_detection
-    if [[ "${MBTC_AUTO_DETECT:-0}" != "1" ]]; then
+    if [[ "${BPM_AUTO_DETECT:-0}" != "1" ]]; then
         echo ""
         echo -en "${T_DIM}Press Enter to continue...${RST}"
         read -r

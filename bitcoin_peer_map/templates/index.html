@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>M₿Core Dashboard</title>
-    <link rel="stylesheet" href="/static/css/bitstyle.css?v={{ cache_bust }}">
+    <title>Bitcoin Peer Map</title>
+    <link rel="stylesheet" href="/static/css/app.css?v={{ cache_bust }}">
     <link rel="stylesheet" href="/static/css/as-diversity.css?v={{ cache_bust }}"><!-- [AS-DIVERSITY] -->
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&display=swap" rel="stylesheet">
 </head>
-<body>
+<body data-repository-url="{{ repository_url }}">
     <!-- Top bar -->
     <header id="topbar">
         <div class="topbar-left">
-            <a href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map" target="_blank" rel="noopener" class="logo" title="Peer map, service provider diversity analysis, and tools for your Bitcoin node - View on GitHub"><span class="logo-m">Bitcoin</span> <span class="logo-b">Peer</span> <span class="logo-core">Map</span></a>
-            <a href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map" target="_blank" rel="noopener" class="version" title="View on GitHub">v{{ version }}</a>
+            <a href="{{ repository_url }}" target="_blank" rel="noopener" class="logo" title="Peer map, service provider diversity analysis, and tools for your Bitcoin node - View on GitHub"><span class="brand-primary">Bitcoin</span> <span class="brand-accent">Peer</span> <span class="brand-primary">Map</span></a>
+            <a href="{{ repository_url }}" target="_blank" rel="noopener" class="version" title="View on GitHub">v{{ version }}</a>
         </div>
         <!-- [AS-DIVERSITY] Flight deck moved to topbar center -->
         <div class="topbar-center" id="topbar-center">
@@ -174,7 +174,7 @@
             <div class="ant-modal-body">
                 <div class="ant-modal-text">Public IPv4 and IPv6 peers are automatically geolocated and displayed with their corresponding service providers.</div>
                 <div class="ant-modal-text" style="margin-top:8px"><strong>Disclaimer:</strong> Peers connected via privacy overlays such as Tor, I2P, and CJDNS do not expose geographic information by design. To preserve visual consistency on the map, they are placed at Antarctic research stations as placeholders. Metrics for these peers are limited to data retrieved from getpeerinfo.</div>
-                <div class="ant-modal-community">Have ideas or found a bug? <a href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map/discussions" target="_blank" rel="noopener">Join the discussion</a> &mdash; click the logo anytime to visit the repo.</div>
+                <div class="ant-modal-community">Have ideas or found a bug? <a href="{{ repository_discussions_url }}" target="_blank" rel="noopener">Join the discussion</a> &mdash; click the logo anytime to visit the repo.</div>
             </div>
             <button id="ant-close" class="ant-modal-btn">Got it</button>
         </div>
@@ -204,7 +204,7 @@
                 <button class="handle-btn handle-btn-green" id="btn-connect-peer" title="Connect to a peer">Connect Peer</button>
                 <button class="handle-btn handle-btn-warn" id="btn-bans" title="View and manage banned peers">Banned Peers</button>
                 <button class="handle-btn handle-btn-accent" id="btn-node-info-peer" title="View detailed node information">NODE-INFO</button>
-                <button class="handle-btn handle-btn-accent" id="btn-mbcore-db-peer" title="GeoIP database info and updates">GEOIP-DB</button>
+                <button class="handle-btn handle-btn-accent" id="btn-geoip-db-peer" title="GeoIP database info and updates">GEOIP-DB</button>
                 <button class="handle-btn handle-btn-dim" id="btn-autofit" title="Automatic column size to fit">FIT</button>
                 <button class="handle-btn handle-btn-dim" id="btn-minimize" title="Toggle peer list table">&#9660;</button>
                 <button class="handle-btn handle-btn-dim" id="btn-table-settings" title="Table settings: columns, transparency">&#9881;</button>
@@ -243,10 +243,10 @@
     <!-- Footer -->
     <footer id="footer" class="footer">
         <span class="footer-btc" id="footer-btc">Support (btc): <span class="footer-btc-addr">bc1qy63057zemrskq0n02avq9egce4cpuuenm5ztf5</span></span>
-        <span class="footer-author">Created by <a class="footer-link" href="https://github.com/mbhillrn/Bitcoin-Core-Peer-Map" target="_blank" rel="noopener" title="Visit mbhillrn Bitcoin Peer Map repository: GitHub">@mbhillrn</a></span>
+        <span class="footer-author">Created by <a class="footer-link" href="https://github.com/mbhillrn" target="_blank" rel="noopener" title="Visit mbhillrn on GitHub">@mbhillrn</a></span>
     </footer>
 
-    <script src="/static/js/as-diversity.js?v={{ cache_bust }}"></script><!-- [AS-DIVERSITY] loaded before bitapp -->
-    <script src="/static/js/bitapp.js?v={{ cache_bust }}"></script>
+    <script src="/static/js/as-diversity.js?v={{ cache_bust }}"></script><!-- [AS-DIVERSITY] loaded before app.js -->
+    <script src="/static/js/app.js?v={{ cache_bust }}"></script>
 </body>
 </html>

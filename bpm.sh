@@ -7,19 +7,19 @@
 set -e
 
 # Get the directory where this script lives
-MBTC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export MBTC_DIR
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PROJECT_ROOT
 
 # Source libraries
-source "$MBTC_DIR/lib/ui.sh"
-source "$MBTC_DIR/lib/prereqs.sh"
-source "$MBTC_DIR/lib/config.sh"
+source "$PROJECT_ROOT/lib/ui.sh"
+source "$PROJECT_ROOT/lib/prereqs.sh"
+source "$PROJECT_ROOT/lib/config.sh"
 
 # Read version from VERSION file
-VERSION=$(cat "$MBTC_DIR/VERSION" 2>/dev/null || echo "0.0.0")
-GITHUB_REPO="mbhillrn/Bitcoin-Core-Peer-Map"
+VERSION=$(cat "$PROJECT_ROOT/VERSION" 2>/dev/null || echo "0.0.0")
+GITHUB_REPO="spyhunter493/bitcoin-peer-map"
 GITHUB_VERSION_URL="https://raw.githubusercontent.com/$GITHUB_REPO/main/VERSION"
-GITHUB_CHANGES_URL="https://raw.githubusercontent.com/$GITHUB_REPO/main/CHANGES"
+GITHUB_CHANGELOG_URL="https://raw.githubusercontent.com/$GITHUB_REPO/main/CHANGELOG.md"
 GEOIP_REPO="mbhillrn/Bitcoin-Node-GeoIP-Dataset"
 GEOIP_DB_URL="https://raw.githubusercontent.com/$GEOIP_REPO/main/geo.db"
 UPDATE_AVAILABLE=0
@@ -27,7 +27,7 @@ LATEST_VERSION=""
 LATEST_CHANGES=""
 
 # Venv paths
-VENV_DIR="$MBTC_DIR/venv"
+VENV_DIR="$PROJECT_ROOT/venv"
 VENV_PYTHON="$VENV_DIR/bin/python3"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -91,17 +91,17 @@ show_status() {
     echo -e "${T_SECONDARY}${BOLD}Current Configuration${RST}"
     echo ""
 
-    if [[ "$MBTC_CONFIGURED" -eq 1 ]]; then
-        print_kv "Bitcoin CLI" "${MBTC_CLI_PATH:-not set}" 16
-        print_kv "Data Directory" "${MBTC_DATADIR:-not set}" 16
-        print_kv "Network" "${MBTC_NETWORK:-main}" 16
-        print_kv "RPC" "${MBTC_RPC_HOST:-127.0.0.1}:${MBTC_RPC_PORT:-8332}" 16
+    if [[ "$config_ready" -eq 1 ]]; then
+        print_kv "Bitcoin CLI" "${BITCOIN_CLI:-not set}" 16
+        print_kv "Data Directory" "${BITCOIN_DATA_DIR:-not set}" 16
+        print_kv "Network" "${BITCOIN_NETWORK:-main}" 16
+        print_kv "RPC" "${BITCOIN_RPC_HOST:-127.0.0.1}:${BITCOIN_RPC_PORT:-8332}" 16
 
         # Show auth method
-        if [[ -n "$MBTC_COOKIE_PATH" && -f "$MBTC_COOKIE_PATH" ]]; then
+        if [[ -n "$BITCOIN_RPC_COOKIE_FILE" && -f "$BITCOIN_RPC_COOKIE_FILE" ]]; then
             print_kv "Auth" "Cookie" 16
-        elif [[ -n "$MBTC_RPC_USER" ]]; then
-            print_kv "Auth" "RPC User ($MBTC_RPC_USER)" 16
+        elif [[ -n "$BITCOIN_RPC_USER" ]]; then
+            print_kv "Auth" "RPC User ($BITCOIN_RPC_USER)" 16
         else
             print_kv "Auth" "Default" 16
         fi
@@ -150,7 +150,7 @@ show_menu() {
 }
 
 run_web_dashboard() {
-    if [[ "$MBTC_CONFIGURED" -ne 1 ]]; then
+    if [[ "$config_ready" -ne 1 ]]; then
         msg_err "Bitcoin node not configured. Run detection first."
         echo ""
         echo -en "${T_DIM}Press Enter to continue...${RST}"
@@ -169,18 +169,18 @@ run_web_dashboard() {
     fi
 
     # Check internet connectivity with countdown
-    MBTC_OFFLINE_START=0
+    BPM_OFFLINE_MODE=0
     if ! check_connectivity_countdown; then
         show_offline_warning
     fi
 
     # Only do geo DB download if we're online
-    if [[ "$MBTC_OFFLINE_START" -eq 0 ]]; then
+    if [[ "$BPM_OFFLINE_MODE" -eq 0 ]]; then
         local geo_auto_update geo_db_enabled
-        geo_auto_update=$(get_config "GEO_DB_AUTO_UPDATE" "false")
-        geo_db_enabled=$(get_config "GEO_DB_ENABLED" "false")
+        geo_auto_update=$(get_config "BPM_GEOIP_AUTO_UPDATE" "false")
+        geo_db_enabled=$(get_config "BPM_GEOIP_ENABLED" "false")
         if [[ "$geo_db_enabled" == "true" ]]; then
-            local geo_db_file="$MBTC_DIR/data/geo.db"
+            local geo_db_file="$APP_DATA_DIR/geo.db"
             if [[ -f "$geo_db_file" ]]; then
                 local db_count
                 db_count=$(sqlite3 "$geo_db_file" "SELECT COUNT(*) FROM geo_cache" 2>/dev/null || echo "0")
@@ -198,9 +198,9 @@ run_web_dashboard() {
     else
         # Offline — show DB status but skip download
         local geo_db_enabled
-        geo_db_enabled=$(get_config "GEO_DB_ENABLED" "false")
+        geo_db_enabled=$(get_config "BPM_GEOIP_ENABLED" "false")
         if [[ "$geo_db_enabled" == "true" ]]; then
-            local geo_db_file="$MBTC_DIR/data/geo.db"
+            local geo_db_file="$APP_DATA_DIR/geo.db"
             if [[ -f "$geo_db_file" ]]; then
                 local db_count
                 db_count=$(sqlite3 "$geo_db_file" "SELECT COUNT(*) FROM geo_cache" 2>/dev/null || echo "0")
@@ -211,12 +211,15 @@ run_web_dashboard() {
 
     # Run web server using venv, pass offline flag
     clear
-    MBTC_OFFLINE_START="$MBTC_OFFLINE_START" "$VENV_PYTHON" "$MBTC_DIR/web/MBCoreServer.py"
+    BPM_DATA_DIR="$APP_DATA_DIR" \
+        BPM_OFFLINE_MODE="$BPM_OFFLINE_MODE" \
+        PYTHONPATH="$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
+        "$VENV_PYTHON" -m bitcoin_peer_map.server
 }
 
 run_detection() {
     local rc=0
-    "$MBTC_DIR/scripts/detect.sh" || rc=$?
+    "$PROJECT_ROOT/scripts/detect.sh" || rc=$?
     # Propagate user abort (Ctrl+C) instead of swallowing it
     if [[ $rc -eq 130 ]]; then
         exit 130
@@ -325,30 +328,30 @@ run_manual_config() {
     fi
 
     # Set the manual values
-    MBTC_CONF="$conf_path"
-    MBTC_DATADIR="$datadir"
+    BITCOIN_CONFIG_FILE="$conf_path"
+    BITCOIN_DATA_DIR="$datadir"
 
     # Now run detection to fill in the rest (CLI, network, auth, etc.)
     echo ""
     echo -e "${T_SECONDARY}${BOLD}Auto-detecting remaining settings...${RST}"
 
     # Source detection script functions
-    source "$MBTC_DIR/scripts/detect.sh"
+    source "$PROJECT_ROOT/scripts/detect.sh"
 
     # Detect CLI
     if detect_bitcoin_cli; then
-        msg_ok "Found bitcoin-cli: $MBTC_CLI_PATH"
+        msg_ok "Found bitcoin-cli: $BITCOIN_CLI"
     fi
 
     # Parse config file for network settings
-    if [[ -f "$MBTC_CONF" ]]; then
-        parse_conf_file "$MBTC_CONF"
+    if [[ -f "$BITCOIN_CONFIG_FILE" ]]; then
+        parse_conf_file "$BITCOIN_CONFIG_FILE"
     fi
 
     # Find cookie
     find_cookie
-    if [[ -n "$MBTC_COOKIE_PATH" && -f "$MBTC_COOKIE_PATH" ]]; then
-        msg_ok "Found cookie auth: $MBTC_COOKIE_PATH"
+    if [[ -n "$BITCOIN_RPC_COOKIE_FILE" && -f "$BITCOIN_RPC_COOKIE_FILE" ]]; then
+        msg_ok "Found cookie auth: $BITCOIN_RPC_COOKIE_FILE"
     fi
 
     # Test RPC
@@ -397,7 +400,7 @@ reset_config() {
             echo ""
             if prompt_yn "Reset settings AND delete the geo/IP database?"; then
                 clear_config
-                rm -f "$MBTC_DIR/data/geo.db"
+                rm -f "$APP_DATA_DIR/geo.db"
                 msg_ok "Configuration and database cleared"
             else
                 msg_info "Cancelled"
@@ -417,7 +420,7 @@ reset_config() {
 
 reset_database() {
     echo ""
-    local db_path="$MBTC_DIR/data/geo.db"
+    local db_path="$APP_DATA_DIR/geo.db"
     if [[ -f "$db_path" ]]; then
         if prompt_yn "Are you sure you want to clear the geolocation database?"; then
             rm -f "$db_path"
@@ -440,11 +443,11 @@ reset_database() {
 # Download or merge the Bitcoin Node GeoIP Dataset into local geo.db
 # Returns: 0 = success, 1 = download failed, 2 = no new data
 download_geoip_dataset() {
-    local geo_db_file="$MBTC_DIR/data/geo.db"
-    local tmp_db="$MBTC_DIR/data/geo_download.tmp"
+    local geo_db_file="$APP_DATA_DIR/geo.db"
+    local tmp_db="$APP_DATA_DIR/geo_download.tmp"
     local local_count=0 remote_count=0 new_count=0
 
-    mkdir -p "$MBTC_DIR/data"
+    mkdir -p "$APP_DATA_DIR"
 
     # Count local entries if DB exists
     if [[ -f "$geo_db_file" ]]; then
@@ -520,9 +523,9 @@ check_connectivity_countdown() {
 
 show_offline_warning() {
     # Show warning when internet is unavailable at startup
-    # Sets MBTC_OFFLINE_START=1 if user continues without connection
+    # Sets BPM_OFFLINE_MODE=1 if user continues without connection
     local geo_db_enabled
-    geo_db_enabled=$(get_config "GEO_DB_ENABLED" "false")
+    geo_db_enabled=$(get_config "BPM_GEOIP_ENABLED" "false")
 
     clear
     echo ""
@@ -563,7 +566,7 @@ show_offline_warning() {
                 echo ""
                 if check_connectivity_countdown; then
                     msg_ok "Connection restored!"
-                    MBTC_OFFLINE_START=0
+                    BPM_OFFLINE_MODE=0
                     sleep 1
                     return 0
                 else
@@ -572,7 +575,7 @@ show_offline_warning() {
                 fi
                 ;;
             "")
-                MBTC_OFFLINE_START=1
+                BPM_OFFLINE_MODE=1
                 return 0
                 ;;
         esac
@@ -586,10 +589,10 @@ show_offline_warning() {
 show_geo_db_settings() {
     local geo_db_enabled
     local geo_db_auto_update
-    local geo_db_file="$MBTC_DIR/data/geo.db"
+    local geo_db_file="$APP_DATA_DIR/geo.db"
 
-    geo_db_enabled=$(get_config "GEO_DB_ENABLED" "false")
-    geo_db_auto_update=$(get_config "GEO_DB_AUTO_UPDATE" "true")
+    geo_db_enabled=$(get_config "BPM_GEOIP_ENABLED" "false")
+    geo_db_auto_update=$(get_config "BPM_GEOIP_AUTO_UPDATE" "true")
 
     clear
     show_banner
@@ -654,16 +657,16 @@ show_geo_db_settings() {
             if [[ "$geo_db_enabled" == "true" ]]; then
                 # Toggle auto-update
                 if [[ "$geo_db_auto_update" == "true" ]]; then
-                    set_config "GEO_DB_AUTO_UPDATE" "false"
+                    set_config "BPM_GEOIP_AUTO_UPDATE" "false"
                     msg_ok "Auto-update disabled"
                 else
-                    set_config "GEO_DB_AUTO_UPDATE" "true"
+                    set_config "BPM_GEOIP_AUTO_UPDATE" "true"
                     msg_ok "Auto-update enabled"
                 fi
             else
                 # Enable database
-                set_config "GEO_DB_ENABLED" "true"
-                set_config "GEO_DB_AUTO_UPDATE" "true"
+                set_config "BPM_GEOIP_ENABLED" "true"
+                set_config "BPM_GEOIP_AUTO_UPDATE" "true"
                 msg_ok "Geo/IP database enabled"
             fi
             sleep 1
@@ -698,7 +701,7 @@ show_geo_db_settings() {
             ;;
         4)
             if [[ "$geo_db_enabled" == "true" ]]; then
-                set_config "GEO_DB_ENABLED" "false"
+                set_config "BPM_GEOIP_ENABLED" "false"
                 msg_ok "Geo/IP database disabled"
                 sleep 1
                 show_geo_db_settings
@@ -740,8 +743,8 @@ show_geo_db_settings() {
 }
 
 show_first_run_db_setup() {
-    # Check if database has already been configured (GEO_DB_ENABLED key exists in config)
-    if has_config "GEO_DB_ENABLED"; then
+    # Check if database has already been configured (BPM_GEOIP_ENABLED key exists in config)
+    if has_config "BPM_GEOIP_ENABLED"; then
         return 0
     fi
 
@@ -759,8 +762,8 @@ show_first_run_db_setup() {
     # On first boot, auto-choose option 1 (recommended)
     echo -e "  ${T_INFO}Enabling database with auto-updates (recommended)...${RST}"
     echo ""
-    set_config "GEO_DB_ENABLED" "true"
-    set_config "GEO_DB_AUTO_UPDATE" "true"
+    set_config "BPM_GEOIP_ENABLED" "true"
+    set_config "BPM_GEOIP_AUTO_UPDATE" "true"
     msg_ok "Database enabled with auto-updates"
     echo ""
     msg_info "Downloading Bitcoin Node GeoIP Dataset..."
@@ -776,7 +779,7 @@ show_first_run_db_setup() {
 }
 
 show_advanced_purge() {
-    local geo_db_file="$MBTC_DIR/data/geo.db"
+    local geo_db_file="$APP_DATA_DIR/geo.db"
 
     clear
     echo ""
@@ -910,7 +913,7 @@ firewall_helper() {
 
     # Get network info
     get_local_network_info
-    local port="${MBTC_WEB_PORT:-58333}"
+    local port="${BPM_LISTEN_PORT:-58333}"
 
     echo -e "${T_INFO}Detected Network Info:${RST}"
     echo -e "  Your IP:        ${T_SUCCESS}$LOCAL_IP${RST}"
@@ -1020,9 +1023,9 @@ network_settings() {
     clear
     show_banner
 
-    local current_port="${MBTC_WEB_PORT:-58333}"
+    local current_port="${BPM_LISTEN_PORT:-58333}"
     local current_bind
-    current_bind=$(get_config "MBTC_WEB_BIND" "0.0.0.0")
+    current_bind=$(get_config "BPM_LISTEN_ADDRESS" "0.0.0.0")
     local bind_label
     if [[ "$current_bind" == "127.0.0.1" ]]; then
         bind_label="Local only (127.0.0.1)"
@@ -1083,7 +1086,7 @@ network_settings() {
                 fi
 
                 # Set and save the new port
-                MBTC_WEB_PORT="$new_port"
+                BPM_LISTEN_PORT="$new_port"
                 save_config
                 echo ""
                 msg_ok "Port changed to $new_port"
@@ -1092,7 +1095,7 @@ network_settings() {
             done
             ;;
         2)
-            MBTC_WEB_PORT="58333"
+            BPM_LISTEN_PORT="58333"
             save_config
             echo ""
             msg_ok "Port reset to default (58333)"
@@ -1119,7 +1122,7 @@ server_access_mode() {
     show_banner
 
     local current_bind
-    current_bind=$(get_config "MBTC_WEB_BIND" "0.0.0.0")
+    current_bind=$(get_config "BPM_LISTEN_ADDRESS" "0.0.0.0")
 
     echo ""
     echo -e "${T_SECONDARY}${BOLD}Server Access Mode${RST}"
@@ -1152,13 +1155,13 @@ server_access_mode() {
 
     case "$access_choice" in
         1)
-            set_config "MBTC_WEB_BIND" "127.0.0.1"
+            set_config "BPM_LISTEN_ADDRESS" "127.0.0.1"
             echo ""
             msg_ok "Access mode set to Local only (127.0.0.1)"
             msg_info "Dashboard will only be accessible from this machine"
             ;;
         2)
-            set_config "MBTC_WEB_BIND" "0.0.0.0"
+            set_config "BPM_LISTEN_ADDRESS" "0.0.0.0"
             echo ""
             msg_ok "Access mode set to LAN accessible (0.0.0.0)"
             msg_info "Dashboard will be accessible from any device on your network"
@@ -1213,7 +1216,7 @@ check_for_updates() {
                 LATEST_VERSION="$remote_version"
                 UPDATE_AVAILABLE=1
                 # Fetch release notes (non-blocking, ok if it fails)
-                LATEST_CHANGES=$(curl -s --connect-timeout 3 --max-time 5 "$GITHUB_CHANGES_URL" 2>/dev/null | head -3)
+                LATEST_CHANGES=$(curl -s --connect-timeout 3 --max-time 5 "$GITHUB_CHANGELOG_URL" 2>/dev/null | head -3)
                 return 0
             elif (( rp < lp )); then
                 return 0
@@ -1238,10 +1241,10 @@ run_update() {
     echo ""
 
     # Check if we're in a git repo
-    if [[ ! -d "$MBTC_DIR/.git" ]]; then
+    if [[ ! -d "$PROJECT_ROOT/.git" ]]; then
         msg_err "Not a git repository. Please update manually:"
         echo ""
-        echo -e "  ${T_DIM}cd $MBTC_DIR${RST}"
+        echo -e "  ${T_DIM}cd $PROJECT_ROOT${RST}"
         echo -e "  ${T_DIM}git pull origin main${RST}"
         echo ""
         echo -en "${T_DIM}Press Enter to continue...${RST}"
@@ -1250,7 +1253,7 @@ run_update() {
     fi
 
     # Check for uncommitted changes
-    cd "$MBTC_DIR" || return 0
+    cd "$PROJECT_ROOT" || return 0
 
     if ! git diff-index --quiet HEAD -- 2>/dev/null; then
         msg_warn "You have uncommitted changes. Stashing them..."
@@ -1266,7 +1269,7 @@ run_update() {
             msg_info "Automatically restarting with new version..."
             sleep 1
             # Restart the script with the new version using absolute path
-            exec "$MBTC_DIR/da.sh"
+            exec "$PROJECT_ROOT/bpm.sh"
         else
             echo ""
             msg_err "Update failed! (git pull returned an error)"
@@ -1311,21 +1314,21 @@ main() {
     fi
 
     # Check if config exists — first boot auto-detects without prompts
-    if [[ "$MBTC_CONFIGURED" -ne 1 ]]; then
+    if [[ "$config_ready" -ne 1 ]]; then
         echo ""
         msg_info "No Bitcoin Peer Map configuration found. Running Bitcoin node detection..."
         sleep 1
-        export MBTC_AUTO_DETECT=1
+        export BPM_AUTO_DETECT=1
         run_detection
         # Reload config — if detection failed, tell user to use manual
         load_config 2>/dev/null || true
-        if [[ "$MBTC_CONFIGURED" -ne 1 ]]; then
+        if [[ "$config_ready" -ne 1 ]]; then
             echo ""
             msg_warn "Detection could not fully configure Bitcoin node."
             msg_info "Use ${T_SECONDARY}m) Manual Settings${RST} from the main menu to enter paths manually."
             sleep 2
         fi
-        unset MBTC_AUTO_DETECT
+        unset BPM_AUTO_DETECT
     fi
 
     # Check for updates (synchronous, always visible)

@@ -30,14 +30,14 @@ jobs:
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Check Python syntax
-        run: python -m compileall -q web tests
+        run: python -m compileall -q bitcoin_peer_map tests
       - name: Check shell scripts
         run: |
-          bash -n da.sh lib/*.sh scripts/*.sh tests/*.sh
+          bash -n bpm.sh lib/*.sh scripts/*.sh tests/*.sh
           sh -n docker-entrypoint.sh
-          shellcheck -x -S error da.sh docker-entrypoint.sh lib/*.sh scripts/*.sh tests/*.sh
+          shellcheck -x -S error bpm.sh docker-entrypoint.sh lib/*.sh scripts/*.sh tests/*.sh
       - name: Check JavaScript syntax
-        run: node --check web/static/js/bitapp.js && node --check web/static/js/as-diversity.js && node --check tests/test_as_diversity.js
+        run: node --check bitcoin_peer_map/static/js/app.js && node --check bitcoin_peer_map/static/js/as-diversity.js && node --check tests/test_as_diversity.js
       - name: Run Python tests
         run: python -m pytest -q
       - name: Run JavaScript tests

@@ -1,9 +1,10 @@
 #!/bin/sh
 set -eu
 
-DATA_DIR=/opt/mbcore/data
+BPM_DATA_DIR=${BPM_DATA_DIR:-/var/lib/bitcoin-peer-map}
+DATA_DIR=$BPM_DATA_DIR
 CONFIG_FILE="$DATA_DIR/config.conf"
-RUNTIME_DIR=/tmp/mbcore
+RUNTIME_DIR=/run/bitcoin-peer-map
 BITCOIN_CONF="$RUNTIME_DIR/bitcoin.conf"
 
 die() {
@@ -42,9 +43,9 @@ quote_config() {
 BITCOIN_RPC_HOST=${BITCOIN_RPC_HOST:-bitcoin}
 BITCOIN_RPC_PORT=${BITCOIN_RPC_PORT:-8332}
 BITCOIN_RPC_USER=${BITCOIN_RPC_USER:-}
-MBTC_NETWORK=${MBTC_NETWORK:-main}
-MBTC_WEB_PORT=${MBTC_WEB_PORT:-58333}
-MBTC_WEB_BIND=${MBTC_WEB_BIND:-0.0.0.0}
+BITCOIN_NETWORK=${BITCOIN_NETWORK:-main}
+BPM_LISTEN_PORT=${BPM_LISTEN_PORT:-58333}
+BPM_LISTEN_ADDRESS=${BPM_LISTEN_ADDRESS:-0.0.0.0}
 
 [ -n "$BITCOIN_RPC_USER" ] || die "BITCOIN_RPC_USER is required"
 
@@ -62,11 +63,11 @@ fi
 [ -n "$BITCOIN_RPC_PASSWORD" ] || die "BITCOIN_RPC_PASSWORD or BITCOIN_RPC_PASSWORD_FILE is required"
 
 case "$BITCOIN_RPC_PORT" in *[!0-9]*|'') die "BITCOIN_RPC_PORT must be numeric" ;; esac
-case "$MBTC_WEB_PORT" in *[!0-9]*|'') die "MBTC_WEB_PORT must be numeric" ;; esac
-case "$MBTC_NETWORK" in main|test|signet|regtest) ;; *) die "MBTC_NETWORK must be main, test, signet, or regtest" ;; esac
-case "$MBTC_WEB_BIND" in 0.0.0.0|127.0.0.1) ;; *) die "MBTC_WEB_BIND must be 0.0.0.0 or 127.0.0.1" ;; esac
+case "$BPM_LISTEN_PORT" in *[!0-9]*|'') die "BPM_LISTEN_PORT must be numeric" ;; esac
+case "$BITCOIN_NETWORK" in main|test|signet|regtest) ;; *) die "BITCOIN_NETWORK must be main, test, signet, or regtest" ;; esac
+case "$BPM_LISTEN_ADDRESS" in 0.0.0.0|127.0.0.1) ;; *) die "BPM_LISTEN_ADDRESS must be 0.0.0.0 or 127.0.0.1" ;; esac
 
-for variable in BITCOIN_RPC_HOST BITCOIN_RPC_USER BITCOIN_RPC_PASSWORD; do
+for variable in BITCOIN_RPC_HOST BITCOIN_RPC_USER BITCOIN_RPC_PASSWORD BPM_DATA_DIR; do
     eval "value=\${$variable}"
     require_single_line "$variable" "$value"
 done
@@ -83,58 +84,53 @@ rpcpassword=$BITCOIN_RPC_PASSWORD
 EOF
 chmod 0600 "$BITCOIN_CONF"
 
-if [ -n "${GEO_DB_ENABLED+x}" ]; then
-    geo_db_enabled=$GEO_DB_ENABLED
+if [ -n "${BPM_GEOIP_ENABLED:-}" ]; then
+    geoip_enabled=$BPM_GEOIP_ENABLED
 else
-    geo_db_enabled=$(config_value GEO_DB_ENABLED 2>/dev/null || printf 'true')
+    geoip_enabled=$(config_value BPM_GEOIP_ENABLED 2>/dev/null || printf 'true')
 fi
 
-if [ -n "${GEO_DB_AUTO_UPDATE+x}" ]; then
-    geo_db_auto_update=$GEO_DB_AUTO_UPDATE
+if [ -n "${BPM_GEOIP_AUTO_UPDATE:-}" ]; then
+    geoip_auto_update=$BPM_GEOIP_AUTO_UPDATE
 else
-    geo_db_auto_update=$(config_value GEO_DB_AUTO_UPDATE 2>/dev/null || printf 'true')
+    geoip_auto_update=$(config_value BPM_GEOIP_AUTO_UPDATE 2>/dev/null || printf 'true')
 fi
 
-case "$geo_db_enabled" in true|false) ;; *) die "GEO_DB_ENABLED must be true or false" ;; esac
-case "$geo_db_auto_update" in true|false) ;; *) die "GEO_DB_AUTO_UPDATE must be true or false" ;; esac
+case "$geoip_enabled" in true|false) ;; *) die "BPM_GEOIP_ENABLED must be true or false" ;; esac
+case "$geoip_auto_update" in true|false) ;; *) die "BPM_GEOIP_AUTO_UPDATE must be true or false" ;; esac
 
-managed_keys='^(MBTC_CLI_PATH|MBTC_DATADIR|MBTC_CONF|MBTC_NETWORK|MBTC_RPC_HOST|MBTC_RPC_PORT|MBTC_RPC_USER|MBTC_COOKIE_PATH|MBTC_WEB_PORT|MBTC_WEB_BIND|MBTC_CONFIGURED|GEO_DB_ENABLED|GEO_DB_AUTO_UPDATE)='
+managed_keys='^(BITCOIN_CLI|BITCOIN_DATA_DIR|BITCOIN_CONFIG_FILE|BITCOIN_NETWORK|BITCOIN_RPC_HOST|BITCOIN_RPC_PORT|BITCOIN_RPC_USER|BITCOIN_RPC_COOKIE_FILE|BPM_LISTEN_PORT|BPM_LISTEN_ADDRESS|BPM_GEOIP_ENABLED|BPM_GEOIP_AUTO_UPDATE)$'
 temp_config=$(mktemp "$DATA_DIR/.config.conf.XXXXXX")
 if [ -f "$CONFIG_FILE" ]; then
-    awk -v managed="$managed_keys" '$0 !~ managed' "$CONFIG_FILE" > "$temp_config"
+    awk -F= -v managed="$managed_keys" '$1 !~ managed && $1 ~ /^[A-Z][A-Z0-9_]*$/' "$CONFIG_FILE" > "$temp_config"
 fi
 
 cat >> "$temp_config" <<EOF
-MBTC_CLI_PATH="/usr/bin/bitcoin-cli"
-MBTC_DATADIR=""
-MBTC_CONF="$(quote_config "$BITCOIN_CONF")"
-MBTC_NETWORK="$(quote_config "$MBTC_NETWORK")"
-
-MBTC_RPC_HOST="$(quote_config "$BITCOIN_RPC_HOST")"
-MBTC_RPC_PORT="$(quote_config "$BITCOIN_RPC_PORT")"
-MBTC_RPC_USER="$(quote_config "$BITCOIN_RPC_USER")"
-MBTC_COOKIE_PATH=""
-
-MBTC_WEB_PORT="$(quote_config "$MBTC_WEB_PORT")"
-MBTC_WEB_BIND="$(quote_config "$MBTC_WEB_BIND")"
-
-MBTC_CONFIGURED=1
-
-GEO_DB_ENABLED="$geo_db_enabled"
-GEO_DB_AUTO_UPDATE="$geo_db_auto_update"
+BITCOIN_CLI="/usr/bin/bitcoin-cli"
+BITCOIN_DATA_DIR=""
+BITCOIN_CONFIG_FILE="$(quote_config "$BITCOIN_CONF")"
+BITCOIN_NETWORK="$(quote_config "$BITCOIN_NETWORK")"
+BITCOIN_RPC_HOST="$(quote_config "$BITCOIN_RPC_HOST")"
+BITCOIN_RPC_PORT="$(quote_config "$BITCOIN_RPC_PORT")"
+BITCOIN_RPC_USER="$(quote_config "$BITCOIN_RPC_USER")"
+BITCOIN_RPC_COOKIE_FILE=""
+BPM_LISTEN_PORT="$(quote_config "$BPM_LISTEN_PORT")"
+BPM_LISTEN_ADDRESS="$(quote_config "$BPM_LISTEN_ADDRESS")"
+BPM_GEOIP_ENABLED="$geoip_enabled"
+BPM_GEOIP_AUTO_UPDATE="$geoip_auto_update"
 EOF
 
 chmod 0600 "$temp_config"
 mv "$temp_config" "$CONFIG_FILE"
 
-case "$MBTC_NETWORK" in
+case "$BITCOIN_NETWORK" in
     main) network_option='' ;;
     test) network_option='-testnet' ;;
     signet) network_option='-signet' ;;
     regtest) network_option='-regtest' ;;
 esac
 
-echo "Bitcoin Peer Map: checking Bitcoin RPC at $BITCOIN_RPC_HOST:$BITCOIN_RPC_PORT ($MBTC_NETWORK)"
+echo "Bitcoin Peer Map: checking Bitcoin RPC at $BITCOIN_RPC_HOST:$BITCOIN_RPC_PORT ($BITCOIN_NETWORK)"
 set -- /usr/bin/bitcoin-cli "-conf=$BITCOIN_CONF"
 if [ -n "$network_option" ]; then
     set -- "$@" "$network_option"
@@ -143,5 +139,6 @@ if ! "$@" getnetworkinfo >/dev/null 2>&1; then
     die "Bitcoin RPC connectivity check failed for $BITCOIN_RPC_HOST:$BITCOIN_RPC_PORT; check the RPC address, network, credentials, rpcbind, and rpcallowip settings"
 fi
 
-echo "Bitcoin Peer Map: Bitcoin RPC is available; starting dashboard on $MBTC_WEB_BIND:$MBTC_WEB_PORT"
-exec /opt/venv/bin/python3 /opt/mbcore/web/MBCoreServer.py
+export BPM_DATA_DIR BPM_LISTEN_PORT BPM_LISTEN_ADDRESS
+echo "Bitcoin Peer Map: Bitcoin RPC is available; starting dashboard on $BPM_LISTEN_ADDRESS:$BPM_LISTEN_PORT"
+exec /opt/venv/bin/python3 -m bitcoin_peer_map.server

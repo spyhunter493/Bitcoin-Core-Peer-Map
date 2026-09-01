@@ -52,9 +52,9 @@ This means you can answer questions like "Which of my peers running Satoshi 28.1
 ## Quick Start
 
 ```bash
-git clone https://github.com/mbhillrn/Bitcoin-Core-Peer-Map.git
-cd Bitcoin-Core-Peer-Map
-./da.sh
+git clone https://github.com/spyhunter493/bitcoin-peer-map.git
+cd bitcoin-peer-map
+./bpm.sh
 ```
 
 On first run, the script checks prerequisites and sets up a Python virtual environment:
@@ -637,7 +637,7 @@ The dashboard automatically checks GitHub for new versions of Bitcoin Peer Map:
 - The backend fetches the remote `VERSION` file from the GitHub repository and compares it to the locally installed version
 - Results are cached for 30 minutes to avoid excessive network requests
 - When a new version is available, a banner appears in the top-right corner of the dashboard: **"Update Available! v7.5.1 -> v7.5.2"** (for example)
-- Hover the banner to see the changelog (pulled from the `CHANGES` file) and instructions for how to update
+- Hover the banner to see the changelog (pulled from the `CHANGELOG.md` file) and instructions for how to update
 - From the terminal menu, use **u) Update** to pull the latest version via `git pull` and auto-restart
 
 **GeoIP Database Auto-Update**
@@ -671,7 +671,7 @@ The GeoIP database that stores peer locations can also update itself:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-`./da.sh` auto-detects your Bitcoin node, launches a FastAPI server on port 58333, and serves the dashboard to your browser. Peer data updates via Server-Sent Events (SSE) for real-time changes.
+`./bpm.sh` auto-detects your Bitcoin node, launches a FastAPI server on port 58333, and serves the dashboard to your browser. Peer data updates via Server-Sent Events (SSE) for real-time changes.
 
 Geolocation uses automated IP geolocation API services such as [ip-api.com](http://ip-api.com) (free, no API key required) for new peers, with results cached in a local SQLite database (`./data/geo.db`). The [Bitcoin Node GeoIP Dataset](https://github.com/mbhillrn/Bitcoin-Node-GeoIP-Dataset) provides pre-cached locations for tens of thousands of known Bitcoin node addresses and grows daily. Every new unique address your node encounters is added to your local database automatically. The system periodically checks the dataset repository for newly discovered addresses and merges only what you don't already have. Your locally discovered addresses stay local and are never uploaded to the repository.
 
@@ -693,27 +693,24 @@ Bitcoin Peer Map talks to the configured node through `bitcoin-cli` and a Bitcoi
 
 This project is independent and is not affiliated with Bitcoin Core or Bitcoin Knots.
 
-Internal compatibility names such as `MBCoreServer.py`, `MBTC_*`, the `mbcore` Compose service, and the `mbcore-data` volume are retained so existing installations, settings, and deployment commands continue to work.
-
 ---
 
 ## Docker
 
-Docker is an additional deployment option; the existing native `./da.sh` workflow remains unchanged. The image is built directly from the checked-out repository and contains Bitcoin Peer Map, Python, and `bitcoin-cli`. It does not contain a Bitcoin node daemon and does not need the blockchain or node datadir mounted into it.
+Docker is an additional deployment option; the existing native `./bpm.sh` workflow remains unchanged. The image is built directly from the checked-out repository and contains Bitcoin Peer Map, Python, and `bitcoin-cli`. It does not contain a Bitcoin node daemon and does not need the blockchain or node datadir mounted into it.
 
 ### Build the image
 
 ```bash
-docker build -t mbcore .
+docker build -t bitcoin-peer-map .
 ```
 
 ### Docker Compose example
 
-Copy the example environment file values into `.env` (which is excluded from the image):
+Create `.env` from the included example, then set dedicated RPC credentials:
 
-```ini
-BITCOIN_RPC_USER=mbcore
-BITCOIN_RPC_PASSWORD=change-me
+```bash
+cp .env.example .env
 ```
 
 Create the external network once, then build and start Bitcoin Peer Map:
@@ -722,10 +719,10 @@ Create the external network once, then build and start Bitcoin Peer Map:
 docker network create bitcoin-rpc
 docker compose -f compose.example.yaml build
 docker compose -f compose.example.yaml up -d
-docker compose -f compose.example.yaml logs -f mbcore
+docker compose -f compose.example.yaml logs -f bpm
 ```
 
-Open `http://localhost:58333`. Application data and settings are stored in the `mbcore-data` volume at `/opt/mbcore/data`.
+Open `http://localhost:58333`. Application data and settings are stored in the `bitcoin-peer-map-data` volume at `/var/lib/bitcoin-peer-map`.
 
 The Bitcoin node may be in another Compose project or on another host. For separate Compose projects, attach both services to the same external `bitcoin-rpc` network and set `BITCOIN_RPC_HOST` to the Bitcoin service or container hostname. Docker DNS then resolves that name without sharing the Bitcoin datadir.
 
@@ -738,15 +735,16 @@ The Bitcoin node may be in another Compose project or on another host. For separ
 | `BITCOIN_RPC_USER` | Yes | — | Dedicated RPC username |
 | `BITCOIN_RPC_PASSWORD` | Yes* | — | RPC password |
 | `BITCOIN_RPC_PASSWORD_FILE` | Yes* | — | Path to a Docker/Kubernetes secret containing the RPC password |
-| `MBTC_NETWORK` | No | `main` | `main`, `test`, `signet`, or `regtest` |
-| `MBTC_WEB_PORT` | No | `58333` | Dashboard listen port |
-| `MBTC_WEB_BIND` | No | `0.0.0.0` | `0.0.0.0` or `127.0.0.1` |
-| `GEO_DB_ENABLED` | No | existing value or `true` | Enable the local GeoIP database |
-| `GEO_DB_AUTO_UPDATE` | No | existing value or `true` | Automatically update the GeoIP database |
+| `BITCOIN_NETWORK` | No | `main` | `main`, `test`, `signet`, or `regtest` |
+| `BPM_HOST_PORT` | No | `58333` | Host port published by Docker Compose |
+| `BPM_LISTEN_PORT` | No | `58333` | Dashboard listen port |
+| `BPM_LISTEN_ADDRESS` | No | `0.0.0.0` | `0.0.0.0` or `127.0.0.1` |
+| `BPM_GEOIP_ENABLED` | No | existing value or `true` | Enable the local GeoIP database |
+| `BPM_GEOIP_AUTO_UPDATE` | No | existing value or `true` | Automatically update the GeoIP database |
 
-*Set exactly one of `BITCOIN_RPC_PASSWORD` or `BITCOIN_RPC_PASSWORD_FILE`. For a Compose secret, mount the secret and set, for example, `BITCOIN_RPC_PASSWORD_FILE=/run/secrets/bitcoin_rpc_password`. Bind-mounted password files must be readable by the container user (`mbcore`, UID 100), or the startup check will fail before RPC validation. RPC credentials are written only to `/tmp/mbcore/bitcoin.conf` with mode `0600`; the password is not stored in the persistent application data volume.
+*Set exactly one of `BITCOIN_RPC_PASSWORD` or `BITCOIN_RPC_PASSWORD_FILE`. For a Compose secret, mount the secret and set, for example, `BITCOIN_RPC_PASSWORD_FILE=/run/secrets/bitcoin_rpc_password`. Bind-mounted password files must be readable by the container user (`bpm`, UID 100), or the startup check will fail before RPC validation. RPC credentials are written only to `/run/bitcoin-peer-map/bitcoin.conf` with mode `0600`; the password is not stored in the persistent application data volume.
 
-When `GEO_DB_ENABLED` or `GEO_DB_AUTO_UPDATE` is omitted, an existing value in `data/config.conf` is preserved across restarts. Supplying either variable explicitly overrides the persisted value on each container start.
+When `BPM_GEOIP_ENABLED` or `BPM_GEOIP_AUTO_UPDATE` is omitted, the existing value in `/var/lib/bitcoin-peer-map/config.conf` is preserved across restarts. Supplying either variable explicitly overrides the persisted value on each container start.
 
 The entrypoint verifies RPC connectivity with `bitcoin-cli getnetworkinfo` before starting the web server. Invalid credentials, an unreachable node, or an incorrect network causes a clear startup failure instead of an unusable dashboard.
 
@@ -778,7 +776,7 @@ Bitcoin data obtained through RPC continues to work normally, including peer and
 **Should work:**
 - Fedora, Arch Linux
 
-If you run into issues on your system, [open an issue](https://github.com/mbhillrn/Bitcoin-Core-Peer-Map/issues).
+If you run into issues on your system, [open an issue](https://github.com/spyhunter493/bitcoin-peer-map/issues).
 
 ---
 
@@ -798,11 +796,13 @@ All dependencies are automatically detected and installed on first run.
 ## Project Structure
 
 ```
-Bitcoin-Core-Peer-Map/
-├── da.sh              # Main entry point
+bitcoin-peer-map/
+├── bpm.sh             # Native launcher
+├── bitcoin_peer_map/  # FastAPI server, templates, and frontend assets
+├── docker-entrypoint.sh
 ├── lib/               # Shell libraries (UI, config, prereqs)
 ├── scripts/           # Bitcoin node detection
-├── web/               # FastAPI server + frontend (HTML5 Canvas)
+├── tests/             # Python, shell, and JavaScript tests
 ├── data/              # Local database and config (created on first run)
 └── venv/              # Python virtual environment (created on first run)
 ```
@@ -836,4 +836,4 @@ If you're feeling generous:
 
 ---
 
-*Created by [@mbhillrn](https://github.com/mbhillrn/Bitcoin-Core-Peer-Map)*
+*Created by [@mbhillrn](https://github.com/mbhillrn)*

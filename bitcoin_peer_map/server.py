@@ -55,19 +55,23 @@ GEO_DB_COLUMNS = (
     "proxy", "hosting", "last_updated",
 )
 
-# Default port for web dashboard (can be configured)
-DEFAULT_WEB_PORT = 58333
+# Default port for the dashboard (can be configured)
+DEFAULT_LISTEN_PORT = 58333
 
 # Paths
-SCRIPT_DIR = Path(__file__).parent
-PROJECT_DIR = SCRIPT_DIR.parent
-DATA_DIR = PROJECT_DIR / 'data'
+PACKAGE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = PACKAGE_DIR.parent
+DATA_DIR = Path(os.environ.get('BPM_DATA_DIR', PROJECT_ROOT / 'data')).expanduser().resolve()
 TMP_DIR = DATA_DIR / 'tmp'
 CONFIG_FILE = DATA_DIR / 'config.conf'
 GEO_DB_FILE = DATA_DIR / 'geo.db'  # Geolocation cache database
-STATIC_DIR = SCRIPT_DIR / 'static'
-TEMPLATES_DIR = SCRIPT_DIR / 'templates'
-VERSION_FILE = PROJECT_DIR / 'VERSION'
+STATIC_DIR = PACKAGE_DIR / 'static'
+TEMPLATES_DIR = PACKAGE_DIR / 'templates'
+VERSION_FILE = PROJECT_ROOT / 'VERSION'
+
+GITHUB_REPOSITORY = os.environ.get('BPM_GITHUB_REPOSITORY', 'spyhunter493/bitcoin-peer-map')
+REPOSITORY_URL = f"https://github.com/{GITHUB_REPOSITORY}"
+REPOSITORY_DISCUSSIONS_URL = f"{REPOSITORY_URL}/discussions"
 
 # Read version from file
 def get_version():
@@ -86,24 +90,24 @@ def get_configured_port():
             with open(CONFIG_FILE, 'r') as f:
                 for line in f:
                     line = line.strip()
-                    if line.startswith('MBTC_WEB_PORT='):
+                    if line.startswith('BPM_LISTEN_PORT='):
                         value = line.split('=', 1)[1].strip('"').strip("'")
                         port = int(value)
                         if 1024 <= port <= 65535:
                             return port
     except Exception:
         pass
-    return DEFAULT_WEB_PORT
+    return DEFAULT_LISTEN_PORT
 
 
-def get_configured_bind():
+def get_configured_address():
     """Read configured bind address from config file, default to 0.0.0.0"""
     try:
         if CONFIG_FILE.exists():
             with open(CONFIG_FILE, 'r') as f:
                 for line in f:
                     line = line.strip()
-                    if line.startswith('MBTC_WEB_BIND='):
+                    if line.startswith('BPM_LISTEN_ADDRESS='):
                         value = line.split('=', 1)[1].strip('"').strip("'")
                         if value in ('127.0.0.1', '0.0.0.0'):
                             return value
@@ -120,26 +124,20 @@ def save_port_to_config(port: int):
             found = False
             new_lines = []
             for line in lines:
-                if line.startswith('MBTC_WEB_PORT='):
-                    new_lines.append(f'MBTC_WEB_PORT="{port}"')
+                if line.startswith('BPM_LISTEN_PORT='):
+                    new_lines.append(f'BPM_LISTEN_PORT="{port}"')
                     found = True
                 else:
                     new_lines.append(line)
             if not found:
-                # Add before MBTC_CONFIGURED line if it exists
-                final_lines = []
-                for line in new_lines:
-                    if line.startswith('MBTC_CONFIGURED='):
-                        final_lines.append(f'MBTC_WEB_PORT="{port}"')
-                    final_lines.append(line)
-                new_lines = final_lines if final_lines else new_lines + [f'MBTC_WEB_PORT="{port}"']
+                new_lines.append(f'BPM_LISTEN_PORT="{port}"')
             CONFIG_FILE.write_text('\n'.join(new_lines) + '\n')
     except Exception as e:
         print(f"Warning: Could not save port to config: {e}")
 
 
 def save_config_value(key: str, value: str):
-    """Save a key=value pair to config.conf (same format as da.sh set_config)."""
+    """Save a key=value pair to config.conf."""
     try:
         if CONFIG_FILE.exists():
             lines = CONFIG_FILE.read_text().splitlines()
@@ -218,7 +216,7 @@ last_price_error = None                # Most recent Coinbase error message
 geo_db_only_mode = False               # When True, skip all API lookups
 
 # Offline startup flag
-offline_start = os.environ.get('MBTC_OFFLINE_START', '0') == '1'
+offline_start = os.environ.get('BPM_OFFLINE_MODE', '0') == '1'
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GLOBAL STATE
@@ -270,11 +268,11 @@ addrman_cache_lock = threading.Lock()
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class Config:
+class NodeConfig:
     def __init__(self):
-        self.cli_path = "bitcoin-cli"
-        self.datadir = ""
-        self.conf = ""
+        self.cli = ""
+        self.data_dir = ""
+        self.config_file = ""
         self.network = "main"
         self._raw_config = {}  # Store all config values
 
@@ -290,15 +288,15 @@ class Config:
                     key, value = line.split('=', 1)
                     value = value.strip('"').strip("'")
                     self._raw_config[key] = value
-                    if key == 'MBTC_CLI_PATH':
-                        self.cli_path = value
-                    elif key == 'MBTC_DATADIR':
-                        self.datadir = value
-                    elif key == 'MBTC_CONF':
-                        self.conf = value
-                    elif key == 'MBTC_NETWORK':
+                    if key == 'BITCOIN_CLI':
+                        self.cli = value
+                    elif key == 'BITCOIN_DATA_DIR':
+                        self.data_dir = value
+                    elif key == 'BITCOIN_CONFIG_FILE':
+                        self.config_file = value
+                    elif key == 'BITCOIN_NETWORK':
                         self.network = value
-            return bool(self.cli_path)
+            return bool(self.cli)
         except Exception:
             return False
 
@@ -307,11 +305,11 @@ class Config:
         return self._raw_config.get(key, default)
 
     def get_cli_command(self) -> list:
-        cmd = [self.cli_path]
-        if self.datadir:
-            cmd.append(f"-datadir={self.datadir}")
-        if self.conf:
-            cmd.append(f"-conf={self.conf}")
+        cmd = [self.cli]
+        if self.data_dir:
+            cmd.append(f"-datadir={self.data_dir}")
+        if self.config_file:
+            cmd.append(f"-conf={self.config_file}")
         if self.network == "test":
             cmd.append("-testnet")
         elif self.network == "signet":
@@ -321,7 +319,7 @@ class Config:
         return cmd
 
 
-config = Config()
+node_config = NodeConfig()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -539,7 +537,7 @@ def refresh_addrman_cache():
     """Refresh the addrman cache from getnodeaddresses"""
     global addrman_cache
     try:
-        cmd = config.get_cli_command() + ['getnodeaddresses', '0']  # 0 = all addresses
+        cmd = node_config.get_cli_command() + ['getnodeaddresses', '0']  # 0 = all addresses
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             addresses = json.loads(result.stdout)
@@ -665,9 +663,9 @@ def kill_existing_dashboard():
     import os
     my_pid = os.getpid()
     try:
-        # Find Python processes running MBCoreServer.py
+        # Find Python processes running this module.
         result = subprocess.run(
-            ['pgrep', '-f', 'python.*MBCoreServer\\.py'],
+            ['pgrep', '-f', 'python.*bitcoin_peer_map\\.server'],
             capture_output=True, text=True
         )
         if result.returncode == 0:
@@ -800,7 +798,7 @@ def _connectivity_checker():
 
 def get_peer_info() -> list:
     try:
-        cmd = config.get_cli_command() + ['getpeerinfo']
+        cmd = node_config.get_cli_command() + ['getpeerinfo']
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             return json.loads(result.stdout)
@@ -813,7 +811,7 @@ def get_enabled_networks() -> list:
     """Get list of enabled/reachable networks from getnetworkinfo"""
     enabled = []
     try:
-        cmd = config.get_cli_command() + ['getnetworkinfo']
+        cmd = node_config.get_cli_command() + ['getnetworkinfo']
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             info = json.loads(result.stdout)
@@ -1690,12 +1688,12 @@ def api_info(currency: str = "USD"):
     # 2. Last block info
     try:
         # Get best block hash
-        cmd = config.get_cli_command() + ['getbestblockhash']
+        cmd = node_config.get_cli_command() + ['getbestblockhash']
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if r.returncode == 0:
             blockhash = r.stdout.strip()
             # Get block header
-            cmd = config.get_cli_command() + ['getblockheader', blockhash]
+            cmd = node_config.get_cli_command() + ['getblockheader', blockhash]
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             if r.returncode == 0:
                 header = json.loads(r.stdout)
@@ -1710,7 +1708,7 @@ def api_info(currency: str = "USD"):
 
     # 3. Blockchain stats (size, pruned, indexed, IBD status)
     try:
-        cmd = config.get_cli_command() + ['getblockchaininfo']
+        cmd = node_config.get_cli_command() + ['getblockchaininfo']
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if r.returncode == 0:
             info = json.loads(r.stdout)
@@ -1722,7 +1720,7 @@ def api_info(currency: str = "USD"):
             # Check if txindex is enabled
             indexed = False
             try:
-                cmd = config.get_cli_command() + ['getindexinfo']
+                cmd = node_config.get_cli_command() + ['getindexinfo']
                 r2 = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                 if r2.returncode == 0:
                     index_info = json.loads(r2.stdout)
@@ -1741,7 +1739,7 @@ def api_info(currency: str = "USD"):
 
     # 4. Network scores from getnetworkinfo localaddresses
     try:
-        cmd = config.get_cli_command() + ['getnetworkinfo']
+        cmd = node_config.get_cli_command() + ['getnetworkinfo']
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if r.returncode == 0:
             netinfo = json.loads(r.stdout)
@@ -1771,7 +1769,7 @@ def api_info(currency: str = "USD"):
 
     # 5. Mempool size (lightweight RPC)
     try:
-        cmd = config.get_cli_command() + ['getmempoolinfo']
+        cmd = node_config.get_cli_command() + ['getmempoolinfo']
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if r.returncode == 0:
             mempoolinfo = json.loads(r.stdout)
@@ -1839,7 +1837,7 @@ def api_mempool(currency: str = "USD"):
     }
 
     try:
-        cmd = config.get_cli_command() + ['getmempoolinfo']
+        cmd = node_config.get_cli_command() + ['getmempoolinfo']
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if r.returncode == 0:
             result['mempool'] = json.loads(r.stdout)
@@ -1884,7 +1882,7 @@ def api_blockchain():
     }
 
     try:
-        cmd = config.get_cli_command() + ['getblockchaininfo']
+        cmd = node_config.get_cli_command() + ['getblockchaininfo']
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if r.returncode == 0:
             result['blockchain'] = json.loads(r.stdout)
@@ -1907,7 +1905,7 @@ async def api_peer_disconnect(request: Request):
             return {'success': False, 'error': 'peer_id is required'}
 
         # Use disconnectnode with empty address and nodeid
-        cmd = config.get_cli_command() + ['disconnectnode', '', str(peer_id)]
+        cmd = node_config.get_cli_command() + ['disconnectnode', '', str(peer_id)]
         r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
@@ -1929,7 +1927,7 @@ async def api_peer_ban(request: Request):
             return {'success': False, 'error': 'peer_id is required'}
 
         # First, get peer info to find the address and network type
-        cmd = config.get_cli_command() + ['getpeerinfo']
+        cmd = node_config.get_cli_command() + ['getpeerinfo']
         r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode != 0:
@@ -1966,7 +1964,7 @@ async def api_peer_ban(request: Request):
             ip = addr
 
         # Ban for 24 hours (86400 seconds)
-        cmd = config.get_cli_command() + ['setban', ip, 'add', '86400']
+        cmd = node_config.get_cli_command() + ['setban', ip, 'add', '86400']
         r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
@@ -1987,7 +1985,7 @@ async def api_peer_unban(request: Request):
         if not address:
             return {'success': False, 'error': 'address is required'}
 
-        cmd = config.get_cli_command() + ['setban', address, 'remove']
+        cmd = node_config.get_cli_command() + ['setban', address, 'remove']
         r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
@@ -2002,7 +2000,7 @@ async def api_peer_unban(request: Request):
 def api_bans():
     """List all banned IPs"""
     try:
-        cmd = config.get_cli_command() + ['listbanned']
+        cmd = node_config.get_cli_command() + ['listbanned']
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
@@ -2018,7 +2016,7 @@ def api_bans():
 def api_bans_clear():
     """Clear all bans"""
     try:
-        cmd = config.get_cli_command() + ['clearbanned']
+        cmd = node_config.get_cli_command() + ['clearbanned']
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
@@ -2063,7 +2061,7 @@ async def api_peer_connect(request: Request):
             if ':' not in address:
                 normalized = address + ':8333'
 
-        cmd = config.get_cli_command() + ['addnode', normalized, 'onetry']
+        cmd = node_config.get_cli_command() + ['addnode', normalized, 'onetry']
         r = await asyncio.to_thread(subprocess.run, cmd, capture_output=True, text=True, timeout=30)
 
         if r.returncode == 0:
@@ -2120,10 +2118,10 @@ async def api_toggle_db_only():
 @app.post("/api/geodb/toggle-auto-update")
 async def api_toggle_auto_update():
     """Toggle geo DB auto-update and persist to config.conf.
-    Syncs with the terminal menu's GEO_DB_AUTO_UPDATE setting."""
+    Syncs with the terminal menu's BPM_GEOIP_AUTO_UPDATE setting."""
     global geo_db_auto_update
     geo_db_auto_update = not geo_db_auto_update
-    save_config_value('GEO_DB_AUTO_UPDATE', 'true' if geo_db_auto_update else 'false')
+    save_config_value('BPM_GEOIP_AUTO_UPDATE', 'true' if geo_db_auto_update else 'false')
     return {
         'success': True,
         'auto_update': geo_db_auto_update,
@@ -2231,21 +2229,20 @@ def api_geodb_update():
 @app.get("/api/cli-info")
 async def api_cli_info():
     """Get the CLI command info for display to user"""
-    cmd_parts = config.get_cli_command()
+    cmd_parts = node_config.get_cli_command()
     return {
-        'cli_path': config.cli_path,
-        'datadir': config.datadir,
-        'conf': config.conf,
-        'network': config.network,
+        'cli_path': node_config.cli,
+        'datadir': node_config.data_dir,
+        'conf': node_config.config_file,
+        'network': node_config.network,
         'base_command': ' '.join(cmd_parts)
     }
 
 
 # ── Update check cache (avoid hammering GitHub) ──
 _update_cache = {'latest': None, 'changes': None, 'checked_at': 0}
-GITHUB_REPO = "mbhillrn/Bitcoin-Core-Peer-Map"
-GITHUB_VERSION_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/VERSION"
-GITHUB_CHANGES_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/CHANGES"
+GITHUB_VERSION_URL = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/VERSION"
+GITHUB_CHANGELOG_URL = f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/CHANGELOG.md"
 
 def _compare_versions(local: str, remote: str) -> bool:
     """Return True if remote is newer than local (semver major.minor.patch)."""
@@ -2286,7 +2283,7 @@ def api_update_check():
         pass
     if latest and _compare_versions(VERSION, latest):
         try:
-            r2 = requests.get(GITHUB_CHANGES_URL, timeout=5)
+            r2 = requests.get(GITHUB_CHANGELOG_URL, timeout=5)
             if r2.status_code == 200:
                 changes = r2.text.strip()
         except Exception:
@@ -2306,7 +2303,16 @@ def api_update_check():
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
     """Serve the main dashboard page"""
-    return templates.TemplateResponse(request, "bitindex.html", {"version": VERSION, "cache_bust": int(time.time())})
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "version": VERSION,
+            "cache_bust": int(time.time()),
+            "repository_url": REPOSITORY_URL,
+            "repository_discussions_url": REPOSITORY_DISCUSSIONS_URL,
+        },
+    )
 
 
 # Mount static files
@@ -2364,13 +2370,13 @@ def get_manual_port() -> int:
 def main():
     global geo_db_enabled, geo_db_auto_update, internet_failure_start
 
-    if not config.load():
-        print("Error: Configuration not found. Run ./da.sh first to configure.")
+    if not node_config.load():
+        print("Error: Configuration not found. Run ./bpm.sh first to configure.")
         sys.exit(1)
 
     # Load geo database settings from config
-    geo_db_enabled = config.get('GEO_DB_ENABLED', 'false').lower() == 'true'
-    geo_db_auto_update = config.get('GEO_DB_AUTO_UPDATE', 'true').lower() == 'true'
+    geo_db_enabled = node_config.get('BPM_GEOIP_ENABLED', 'false').lower() == 'true'
+    geo_db_auto_update = node_config.get('BPM_GEOIP_AUTO_UPDATE', 'true').lower() == 'true'
 
     # Initialize geo database if enabled
     if geo_db_enabled:
@@ -2419,7 +2425,7 @@ def main():
                     print(f"{C_RED}Invalid choice. Enter 1 or q{C_RESET}")
 
     # Get configured bind address (127.0.0.1 = local only, 0.0.0.0 = LAN)
-    bind_host = get_configured_bind()
+    bind_host = get_configured_address()
     local_only = (bind_host == "127.0.0.1")
 
     # Get local IPs and subnets
@@ -2515,7 +2521,7 @@ def main():
 
     print("")
     print(f"{C_BLUE}{'─' * line_w}{C_RESET}")
-    print(f"  {C_RED}Need help?{C_RESET} See the {C_RED}README{C_RESET} or visit github.com/mbhillrn/Bitcoin-Core-Peer-Map")
+    print(f"  {C_RED}Need help?{C_RESET} See the {C_RED}README{C_RESET} or visit {REPOSITORY_URL}")
     print(f"  Press {C_PINK}Ctrl+C{C_RESET} to stop the dashboard")
     print(f"{C_BLUE}{'═' * line_w}{C_RESET}")
     print("")
