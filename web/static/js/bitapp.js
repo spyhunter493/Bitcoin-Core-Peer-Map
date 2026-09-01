@@ -1,8 +1,8 @@
 /* ============================================================
-   MBCore vNext — Canvas World Map with Real Bitcoin Peers
+   Bitcoin Peer Map — Canvas World Map with Real Bitcoin Peers
    Interaction Stabilization Pass
    ============================================================
-   - Fetches real peers from the existing MBCoreServer backend
+   - Fetches real peers from the existing server backend
    - Renders them on a canvas world map (no Leaflet)
    - Private/overlay networks (Tor, I2P, CJDNS) placed in Antarctica
    - Visual peer lifecycle: arrival bloom → age brightness → fade-out
@@ -585,7 +585,7 @@
         ipv4: 'IPv4', ipv6: 'IPv6', onion: 'Tor', i2p: 'I2P', cjdns: 'CJDNS',
     };
 
-    // Bitcoin Core service flag abbreviations and descriptions
+    // Bitcoin node service flag abbreviations and descriptions
     const SERVICE_FLAGS = {
         'NETWORK':          { abbr: 'N',  desc: 'Full chain history (NODE_NETWORK)' },
         'WITNESS':          { abbr: 'W',  desc: 'Segregated Witness support (NODE_WITNESS)' },
@@ -904,7 +904,7 @@
         if (info.isOverlay) {
             html += '<div class="fdt-row-muted">Overlay network (no reliable local score)</div>';
         } else if (scoreVal) {
-            html += `<div class="fdt-row">Local Bitcoin Core Network Score: ${scoreVal}</div>`;
+            html += `<div class="fdt-row">Local Bitcoin node Network Score: ${scoreVal}</div>`;
         }
 
         if (isEnabled) {
@@ -912,7 +912,7 @@
                 html += '<div class="fdt-row-muted">Appears to be properly configured</div>';
             }
         } else {
-            html += '<div class="fdt-warn">This network is either disabled, or not currently connected.<br>Please check your settings in Bitcoin Core</div>';
+            html += '<div class="fdt-warn">This network is either disabled, or not currently connected.<br>Please check your settings in Bitcoin node</div>';
         }
 
         return html;
@@ -1223,7 +1223,7 @@
     // GEODB MANAGEMENT DROPDOWN
     // ═══════════════════════════════════════════════════════════
 
-    /** Open MBCore DB as a centered modal (like Node Info) */
+    /** Open GeoIP DB as a centered modal (like Node Info) */
     function openGeoDBDropdown() {
         const existing = document.getElementById('geodb-modal');
         if (existing) existing.remove();
@@ -1231,7 +1231,7 @@
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.id = 'geodb-modal';
-        overlay.innerHTML = `<div class="modal-box" style="max-width:480px"><div class="modal-header"><span class="modal-title">MBCore DB</span><button class="modal-close" id="geodb-modal-close">&times;</button></div><div class="modal-body" id="geodb-modal-body"><div style="color:var(--text-muted);text-align:center;padding:16px">Loading...</div></div></div>`;
+        overlay.innerHTML = `<div class="modal-box" style="max-width:480px"><div class="modal-header"><span class="modal-title">GeoIP DB</span><button class="modal-close" id="geodb-modal-close">&times;</button></div><div class="modal-body" id="geodb-modal-body"><div style="color:var(--text-muted);text-align:center;padding:16px">Loading...</div></div></div>`;
         document.body.appendChild(overlay);
         document.getElementById('geodb-modal-close').addEventListener('click', () => overlay.remove());
         overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
@@ -1346,7 +1346,7 @@
         overlay.innerHTML = `<div class="modal-box" style="max-width:520px">
             <div class="modal-header"><span class="modal-title">Connect Peer</span><button class="modal-close" id="connect-close">&times;</button></div>
             <div class="modal-body">
-                <div class="connect-instructions">Enter a peer address to connect. Bitcoin Core will attempt a one-time (onetry) connection.</div>
+                <div class="connect-instructions">Enter a peer address to connect. Bitcoin node will attempt a one-time (onetry) connection.</div>
                 <div class="connect-example">IPv4: 1.2.3.4:8333</div>
                 <div class="connect-example">IPv6: [2001:db8::1]:8333</div>
                 <div class="connect-example">Tor: abc...xyz.onion:8333</div>
@@ -1444,7 +1444,7 @@
         roNodeInfoLink.addEventListener('click', (e) => { e.stopPropagation(); openNodeInfoModal(); });
     }
 
-    // Right overlay: MBCORE DB link
+    // Right overlay: GEOIP DB link
     const roGeodbLink = document.getElementById('ro-geodb-link');
     if (roGeodbLink) {
         roGeodbLink.addEventListener('click', (e) => { e.stopPropagation(); openGeoDBDropdown(); });
@@ -4357,7 +4357,7 @@
             // Update BTC price in topbar
             updateBtcPricePanel(info);
 
-            // Update right overlay MBCore DB count
+            // Update right overlay GeoIP DB count
             if (info.geo_db_stats && info.geo_db_stats.entries != null) {
                 const geodbCountEl = document.getElementById('ro-geodb-count');
                 if (geodbCountEl) geodbCountEl.textContent = info.geo_db_stats.entries.toLocaleString();
@@ -4404,7 +4404,7 @@
         if (lastNodeInfo) {
             const info = lastNodeInfo;
             const ver = info.subversion || '\u2014';
-            html += mrow('Version', ver, 'Bitcoin Core user agent string', ver);
+            html += mrow('Version', ver, 'Bitcoin node user agent string', ver);
             html += mrow('Peers', info.connected != null ? info.connected : '\u2014', 'Total number of connected peers', info.connected != null ? `${info.connected} peers connected` : '');
             if (info.blockchain) {
                 html += mrow('Size (Disk)', `${info.blockchain.size_gb} GB`, 'Total blockchain data stored on disk', `${info.blockchain.size_gb} GB`);
@@ -4596,10 +4596,10 @@
         if (!dot) return;
         if (connected) {
             dot.classList.add('online');
-            dot.title = 'MBCore dashboard is running and connected';
+            dot.title = 'Bitcoin Peer Map is running and connected';
         } else {
             dot.classList.remove('online');
-            dot.title = 'MBCore dashboard service is not responding';
+            dot.title = 'Bitcoin Peer Map service is not responding';
         }
     }
 
@@ -5085,7 +5085,7 @@
     /**
      * Connection-age brightness.
      * New peers start dim, veteran peers glow fully.
-     * Uses conntime (Unix timestamp from Bitcoin Core) to compute real age.
+     * Uses conntime (Unix timestamp from Bitcoin node) to compute real age.
      */
     function getAgeBrightness(node, nowSec) {
         if (!node.conntime || node.conntime <= 0) return CFG.ageBrightnessMax;
@@ -7761,7 +7761,7 @@
 
         let html = '<div class="dsp-title">Map Settings</div>';
         html += '<div class="dsp-section">Update Frequency</div>';
-        html += `<div class="dsp-row"><span class="dsp-label" title="How often peer list is fetched from Bitcoin Core">Peer list</span><div class="dsp-input-wrap"><input type="number" class="dsp-input" id="dsp-poll-sec" value="${pollSec}" min="3" max="120"><span class="dsp-unit">sec</span></div></div>`;
+        html += `<div class="dsp-row"><span class="dsp-label" title="How often peer list is fetched from Bitcoin node">Peer list</span><div class="dsp-input-wrap"><input type="number" class="dsp-input" id="dsp-poll-sec" value="${pollSec}" min="3" max="120"><span class="dsp-unit">sec</span></div></div>`;
         html += `<div class="dsp-row"><span class="dsp-label" title="How often node info and BTC price are refreshed">Node info &amp; price</span><div class="dsp-input-wrap"><input type="number" class="dsp-input" id="dsp-info-sec" value="${infoSec}" min="5" max="120"><span class="dsp-unit">sec</span></div></div>`;
         html += '<div class="dsp-section">Show / Hide</div>';
         visItems.forEach(item => {
@@ -7947,7 +7947,7 @@
             }
         }
 
-        // Update right overlay MBCore DB entry count
+        // Update right overlay GeoIP DB entry count
         const geodbCountEl = document.getElementById('ro-geodb-count');
         if (geodbCountEl && lastNodeInfo && lastNodeInfo.geo_db_stats && lastNodeInfo.geo_db_stats.entries != null) {
             geodbCountEl.textContent = lastNodeInfo.geo_db_stats.entries.toLocaleString();
@@ -8898,7 +8898,7 @@
             nodeInfoPeerBtn.addEventListener('click', (e) => { e.stopPropagation(); openNodeInfoModal(); });
         }
 
-        // MBCORE-DB button in peer panel handle
+        // GEOIP-DB button in peer panel handle
         const mbcoreDbPeerBtn = document.getElementById('btn-mbcore-db-peer');
         if (mbcoreDbPeerBtn) {
             mbcoreDbPeerBtn.addEventListener('click', (e) => { e.stopPropagation(); openGeoDBDropdown(); });
