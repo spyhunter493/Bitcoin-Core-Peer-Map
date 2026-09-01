@@ -40,12 +40,24 @@ export MBTC_CONFIGURED=0
 load_config() {
     [[ ! -f "$MBTC_CACHE_FILE" ]] && return 1
 
-    # Source the config file to load variables
-    source "$MBTC_CACHE_FILE" 2>/dev/null || return 1
+    local key value
+    while IFS='=' read -r key value; do
+        [[ -z "$key" || "$key" == \#* ]] && continue
+        case "$key" in
+            MBTC_CLI_PATH|MBTC_DATADIR|MBTC_CONF|MBTC_NETWORK|MBTC_RPC_HOST|MBTC_RPC_PORT|MBTC_RPC_USER|MBTC_COOKIE_PATH|MBTC_WEB_PORT|MBTC_WEB_BIND|MBTC_CONFIGURED|GEO_DB_ENABLED|GEO_DB_AUTO_UPDATE) ;;
+            *) continue ;;
+        esac
 
-    # Validate we have at least CLI path
+        if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+            value="${value:1:${#value}-2}"
+        elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+            value="${value:1:${#value}-2}"
+        fi
+        printf -v "$key" '%s' "$value"
+        export "$key"
+    done < "$MBTC_CACHE_FILE"
+
     [[ -z "$MBTC_CLI_PATH" ]] && return 1
-
     MBTC_CONFIGURED=1
     return 0
 }
@@ -107,6 +119,8 @@ set_config() {
     local key="$1"
     local value="$2"
 
+    [[ "$key" =~ ^(MBTC_[A-Z0-9_]+|GEO_DB_(ENABLED|AUTO_UPDATE))$ ]] || return 1
+
     mkdir -p "$MBTC_CONFIG_DIR"
 
     # Create file if it doesn't exist
@@ -156,26 +170,27 @@ clear_config() {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Build bitcoin-cli command with all necessary flags
-get_cli_command() {
-    local cmd="${MBTC_CLI_PATH:-bitcoin-cli}"
-
-    [[ -n "$MBTC_DATADIR" ]] && cmd+=" -datadir=$MBTC_DATADIR"
-    [[ -n "$MBTC_CONF" ]] && cmd+=" -conf=$MBTC_CONF"
+build_cli_command() {
+    MBTC_CLI_CMD=("${MBTC_CLI_PATH:-bitcoin-cli}")
+    [[ -n "$MBTC_DATADIR" ]] && MBTC_CLI_CMD+=("-datadir=$MBTC_DATADIR")
+    [[ -n "$MBTC_CONF" ]] && MBTC_CLI_CMD+=("-conf=$MBTC_CONF")
 
     case "$MBTC_NETWORK" in
-        test)   cmd+=" -testnet" ;;
-        signet) cmd+=" -signet" ;;
-        regtest) cmd+=" -regtest" ;;
+        test) MBTC_CLI_CMD+=("-testnet") ;;
+        signet) MBTC_CLI_CMD+=("-signet") ;;
+        regtest) MBTC_CLI_CMD+=("-regtest") ;;
     esac
-
-    echo "$cmd"
 }
 
-# Run a bitcoin-cli command
+get_cli_command() {
+    build_cli_command
+    printf '%q ' "${MBTC_CLI_CMD[@]}"
+    printf '\n'
+}
+
 run_cli() {
-    local cli_cmd
-    cli_cmd=$(get_cli_command)
-    $cli_cmd "$@"
+    build_cli_command
+    "${MBTC_CLI_CMD[@]}" "$@"
 }
 
 # Test RPC connection
