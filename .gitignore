@@ -8,6 +8,9 @@ env/
 venv/
 .venv/
 
+# JavaScript
+node_modules/
+
 # Local configuration and secrets
 .env
 compose.override.yaml

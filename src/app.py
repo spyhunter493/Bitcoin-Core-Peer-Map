@@ -78,6 +78,10 @@ def create_app(settings: AppSettings, runtime: AppRuntime | None = None) -> Fast
     revision_url = (
         f"{repository_url}/commit/{revision}" if revision != "unknown" else repository_url
     )
+    app.state.repository_url = repository_url
+    app.state.revision = revision
+    app.state.revision_url = revision_url
+    app.state.asset_revision = asset_revision
 
     @app.get("/", response_class=HTMLResponse)
     async def dashboard(request: Request):

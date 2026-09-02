@@ -90,6 +90,7 @@ class AppSettings:
     rpc_port: int
     rpc_user: str
     rpc_password: str
+    rpc_password_file_configured: bool
     rpc_verify_tls: bool
     rpc_timeout: int
     rpc_startup_timeout: int
@@ -131,6 +132,7 @@ class AppSettings:
             rpc_port=_integer(values, "BITCOIN_RPC_PORT", 8332, 1, 65535),
             rpc_user=_required(values, "BITCOIN_RPC_USER"),
             rpc_password=_rpc_password(values),
+            rpc_password_file_configured=bool(values.get("BITCOIN_RPC_PASSWORD_FILE", "").strip()),
             rpc_verify_tls=_boolean(values, "BITCOIN_RPC_VERIFY_TLS", True),
             rpc_timeout=_integer(values, "BITCOIN_RPC_TIMEOUT", 30, 1, 300),
             rpc_startup_timeout=_integer(values, "BPM_RPC_STARTUP_TIMEOUT", 30, 1, 600),

@@ -8,7 +8,8 @@ from settings import AppSettings
 
 
 class FakeRuntime:
-    def __init__(self):
+    def __init__(self, settings: AppSettings):
+        self.settings = settings
         self.started = False
         self.stopped = False
         self.metrics = FakeMetrics()
@@ -38,13 +39,39 @@ def settings(tmp_path: Path) -> AppSettings:
 
 
 def test_application_factory_serves_health_dashboard_and_assets(tmp_path: Path) -> None:
-    runtime: Any = FakeRuntime()
-    app = create_app(settings(tmp_path), runtime)
+    app_settings = settings(tmp_path)
+    runtime: Any = FakeRuntime(app_settings)
+    app = create_app(app_settings, runtime)
 
     with TestClient(app) as client:
         assert runtime.started is True
         assert client.get("/healthz").json() == {"status": "ok"}
         assert client.get("/api/stats").json() == {"system_stats": {"cpu_pct": 12.5}}
+        config = client.get("/api/config")
+        assert config.status_code == 200
+        assert "secret" not in config.text
+        assert config.json()["bitcoin_rpc"] == {
+            "scheme": "http",
+            "host": "bitcoin",
+            "port": 8332,
+            "network": "main",
+            "verify_tls": True,
+            "timeout": 30,
+            "startup_timeout": 30,
+            "username_configured": True,
+            "password_configured": True,
+            "password_file_configured": False,
+            "endpoint": "http://bitcoin:8332",
+        }
+        assert config.json()["build"] == {
+            "revision": "abcdef0123456789abcdef0123456789abcdef01",
+            "revision_known": True,
+            "asset_revision": "abcdef0123456789abcdef0123456789abcdef01",
+            "revision_url": (
+                "https://github.com/spyhunter493/bitcoin-peer-map/commit/"
+                "abcdef0123456789abcdef0123456789abcdef01"
+            ),
+        }
         dashboard = client.get("/")
         assert "Bitcoin Peer Map" in dashboard.text
         assert "abcdef0" in dashboard.text

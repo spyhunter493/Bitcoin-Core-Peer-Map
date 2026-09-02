@@ -25,6 +25,47 @@ def stats(runtime: AppRuntime = Depends(runtime_from)):
     return {"system_stats": runtime.metrics.summary()}
 
 
+@router.get("/api/config")
+def config(request: Request, runtime: AppRuntime = Depends(runtime_from)):
+    settings = runtime.settings
+    return {
+        "bitcoin_rpc": {
+            "scheme": settings.rpc_scheme,
+            "host": settings.rpc_host,
+            "port": settings.rpc_port,
+            "network": settings.bitcoin_network,
+            "verify_tls": settings.rpc_verify_tls,
+            "timeout": settings.rpc_timeout,
+            "startup_timeout": settings.rpc_startup_timeout,
+            "username_configured": bool(settings.rpc_user),
+            "password_configured": bool(settings.rpc_password),
+            "password_file_configured": settings.rpc_password_file_configured,
+            "endpoint": settings.rpc_url,
+        },
+        "server": {
+            "listen_address": settings.listen_address,
+            "listen_port": settings.listen_port,
+        },
+        "geoip": {
+            "enabled": settings.geoip_enabled,
+            "auto_update_override": settings.geoip_auto_update_override,
+        },
+        "build": {
+            "revision": settings.build_revision,
+            "revision_known": settings.build_revision != "unknown",
+            "asset_revision": getattr(request.app.state, "asset_revision", "unknown"),
+            "revision_url": getattr(request.app.state, "revision_url", None),
+        },
+        "repository": {
+            "github": settings.github_repository,
+            "url": getattr(request.app.state, "repository_url", None),
+        },
+        "data": {
+            "data_dir": str(settings.data_dir),
+        },
+    }
+
+
 @router.get("/api/stream/system")
 async def system_stream(request: Request, runtime: AppRuntime = Depends(runtime_from)):
     async def generate():

@@ -461,7 +461,8 @@
         try {
             const saved = localStorage.getItem(STORAGE_KEYS.theme);
             if (saved && THEMES[saved]) {
-                const hasSavedAdv = !!localStorage.getItem(STORAGE_KEYS.peerTableDisplay);
+                const savedDisplay = readSavedDisplaySettings();
+                const hasSavedAdv = Object.keys(ADV_DEFAULTS).some(k => savedDisplay[k] !== undefined);
                 applyTheme(saved, hasSavedAdv ? { preserveAdvSettings: true } : undefined);
             }
         } catch (e) { /* ignore */ }
@@ -560,17 +561,29 @@
         }
     }
 
-    /** Load saved settings from localStorage */
-    function loadAdvSettings() {
+    function readSavedDisplaySettings() {
         try {
             const raw = localStorage.getItem(STORAGE_KEYS.peerTableDisplay);
             if (raw) {
                 const saved = JSON.parse(raw);
-                for (const k of Object.keys(ADV_DEFAULTS)) {
-                    if (saved[k] !== undefined) advSettings[k] = saved[k];
-                }
+                if (saved && typeof saved === 'object' && !Array.isArray(saved)) return saved;
             }
         } catch (e) { /* ignore corrupt data */ }
+        return {};
+    }
+
+    function writeSavedDisplaySettings(settings) {
+        try {
+            localStorage.setItem(STORAGE_KEYS.peerTableDisplay, JSON.stringify(settings));
+        } catch (e) { /* quota exceeded, silently fail */ }
+    }
+
+    /** Load saved settings from localStorage */
+    function loadAdvSettings() {
+        const saved = readSavedDisplaySettings();
+        for (const k of Object.keys(ADV_DEFAULTS)) {
+            if (saved[k] !== undefined) advSettings[k] = saved[k];
+        }
         // Always sync CFG from advSettings (whether loaded or defaults)
         CFG.shimmerStrength    = advSettings.shimmerStrength;
         CFG.pulseDepthInbound  = advSettings.pulseDepthIn;
@@ -582,9 +595,12 @@
 
     /** Save current settings to localStorage */
     function saveAdvSettings() {
-        try {
-            localStorage.setItem(STORAGE_KEYS.peerTableDisplay, JSON.stringify(advSettings));
-        } catch (e) { /* quota exceeded, silently fail */ }
+        writeSavedDisplaySettings(Object.assign(
+            {},
+            readSavedDisplaySettings(),
+            advSettings,
+            currentTableDisplaySettings()
+        ));
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1039,7 +1055,7 @@
     // CURRENCY SELECTOR DROPDOWN
     // ═══════════════════════════════════════════════════════════
 
-    const CURRENCIES = ['USD','EUR','GBP','JPY','CHF','CAD','AUD','CNY','HKD','SGD'];
+    const CURRENCIES = ['USD','EUR','GBP','JPY','CHF','CAD','AUD','CNY','NZD','SGD'];
     const CURRENCY_META = {
         USD: { symbol: '$',   decimals: 2 },
         EUR: { symbol: '\u20AC',  decimals: 2 },  // €
@@ -1049,7 +1065,7 @@
         CAD: { symbol: 'C$',  decimals: 2 },
         AUD: { symbol: 'A$',  decimals: 2 },
         CNY: { symbol: 'CN\u00A5', decimals: 2 },  // CN¥
-        HKD: { symbol: 'HK$', decimals: 2 },
+        NZD: { symbol: 'NZ$', decimals: 2 },
         SGD: { symbol: 'S$',  decimals: 2 },
     };
 
@@ -5930,6 +5946,73 @@
     // Auto-fit column state: ON by default, OFF when user resizes
     let autoFitColumns = true;
     let userColumnWidths = {};  // key -> px width (only used when autoFit OFF)
+    let panelOpacity = 0;       // 0 = invisible, 100 = opaque
+    let maxPeerRows = 10;       // visible rows in peer table
+    let showAntarcticaPeers = true;
+    const TABLE_COLUMN_KEYS = new Set(COLUMNS.map(c => c.key));
+
+    function normalizeVisibleColumns(columns) {
+        if (!Array.isArray(columns)) return [...DEFAULT_VISIBLE_COLUMNS];
+        const normalized = [];
+        for (const key of columns) {
+            if (typeof key === 'string' && TABLE_COLUMN_KEYS.has(key) && !normalized.includes(key)) {
+                normalized.push(key);
+            }
+        }
+        return normalized.length > 0 ? normalized : [...DEFAULT_VISIBLE_COLUMNS];
+    }
+
+    function normalizeColumnWidths(widths) {
+        const normalized = {};
+        if (!widths || typeof widths !== 'object' || Array.isArray(widths)) return normalized;
+        for (const [key, rawWidth] of Object.entries(widths)) {
+            if (!TABLE_COLUMN_KEYS.has(key)) continue;
+            const width = Number(rawWidth);
+            if (Number.isFinite(width)) normalized[key] = Math.round(clamp(width, 30, 400));
+        }
+        return normalized;
+    }
+
+    function currentTableDisplaySettings() {
+        return {
+            visibleColumns: [...visibleColumns],
+            autoFitColumns,
+            userColumnWidths: normalizeColumnWidths(userColumnWidths),
+            panelOpacity,
+            maxPeerRows,
+            showAntarcticaPeers,
+        };
+    }
+
+    function saveTableDisplaySettings() {
+        writeSavedDisplaySettings(Object.assign(
+            {},
+            readSavedDisplaySettings(),
+            currentTableDisplaySettings()
+        ));
+    }
+
+    function loadTableDisplaySettings() {
+        const saved = readSavedDisplaySettings();
+
+        visibleColumns = normalizeVisibleColumns(saved.visibleColumns);
+
+        if (typeof saved.autoFitColumns === 'boolean') {
+            autoFitColumns = saved.autoFitColumns;
+        }
+        userColumnWidths = normalizeColumnWidths(saved.userColumnWidths);
+        if (autoFitColumns) userColumnWidths = {};
+
+        if (Number.isFinite(Number(saved.panelOpacity))) {
+            panelOpacity = Math.round(clamp(Number(saved.panelOpacity), 0, 100));
+        }
+        if (Number.isFinite(Number(saved.maxPeerRows))) {
+            maxPeerRows = Math.round(clamp(Number(saved.maxPeerRows), 3, 40));
+        }
+        if (typeof saved.showAntarcticaPeers === 'boolean') {
+            showAntarcticaPeers = saved.showAntarcticaPeers;
+        }
+    }
 
     // Panel DOM (let because ban list view replaces and restores them)
     const panelEl = document.getElementById('peer-panel');
@@ -6217,6 +6300,7 @@
         };
         const onUp = () => {
             resizeState = null;
+            saveTableDisplaySettings();
             window.removeEventListener('mousemove', onMove);
             window.removeEventListener('mouseup', onUp);
         };
@@ -6285,6 +6369,7 @@
                     renderColgroup();
                     renderPeerTableHead();
                     renderPeerTable();
+                    saveTableDisplaySettings();
                 }
             }
         };
@@ -6312,12 +6397,12 @@
         if (autoFitColumns) userColumnWidths = {};
         updateAutoFitBtn();
         renderColgroup();
+        saveTableDisplaySettings();
     });
 
     // ── Table Settings gear popup (column toggles + transparency) ──
     const tableSettingsBtn = document.getElementById('btn-table-settings');
     let tableSettingsEl = null;
-    let panelOpacity = 0; // default percentage (0 = invisible, 100 = opaque)
 
     if (tableSettingsBtn) {
         tableSettingsBtn.addEventListener('click', (e) => {
@@ -6375,6 +6460,7 @@
                 panelOpacity = parseInt(opacitySlider.value);
                 opacityVal.textContent = panelOpacity + '%';
                 applyPanelOpacity();
+                saveTableDisplaySettings();
             });
         }
 
@@ -6386,6 +6472,7 @@
                 maxPeerRows = parseInt(rowsSlider.value);
                 if (rowsVal) rowsVal.textContent = maxPeerRows;
                 applyMaxPeerRows();
+                saveTableDisplaySettings();
             });
         }
 
@@ -6406,6 +6493,7 @@
                 renderColgroup();
                 renderPeerTableHead();
                 renderPeerTable();
+                saveTableDisplaySettings();
             });
         });
 
@@ -6414,6 +6502,7 @@
         if (antToggle) {
             antToggle.addEventListener('change', () => {
                 showAntarcticaPeers = antToggle.checked;
+                saveTableDisplaySettings();
             });
         }
 
@@ -6439,6 +6528,7 @@
                 renderColgroup();
                 renderPeerTableHead();
                 renderPeerTable();
+                saveTableDisplaySettings();
                 // Refresh the popup to reflect changes
                 closeTableSettings();
                 openTableSettings();
@@ -7439,7 +7529,6 @@
     const netBadges = document.querySelectorAll('.handle-nets .net-badge');
     const netPopover = document.getElementById('net-popover');
     const antCloseBtn = document.getElementById('ant-close');
-    let showAntarcticaPeers = true; // setting: show private network peers in Antarctica (default ON)
 
     /** Update badge visual states to reflect the current multi-select filter */
     function updateBadgeStates() {
@@ -7597,7 +7686,6 @@
     // ═══════════════════════════════════════════════════════════
 
     let displaySettingsEl = null;
-    let maxPeerRows = 10;  // Default visible rows in peer table (resize panel to fit)
 
     function openDisplaySettingsPopup(anchorEl) {
         closeDisplaySettingsPopup();
@@ -8873,6 +8961,13 @@
 
         // Load and apply saved theme (or stay on dark default)
         loadTheme();
+
+        // Restore table layout preferences before peer rows render.
+        loadTableDisplaySettings();
+        applyPanelOpacity();
+        updateAutoFitBtn();
+        renderPeerTableHead();
+        renderPeerTable();
 
         // Setup canvas size and DPI scaling
         resize();

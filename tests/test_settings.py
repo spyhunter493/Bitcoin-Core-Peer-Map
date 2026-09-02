@@ -37,7 +37,10 @@ def test_settings_support_password_file(tmp_path: Path) -> None:
     environment.pop("BITCOIN_RPC_PASSWORD")
     environment["BITCOIN_RPC_PASSWORD_FILE"] = str(password_file)
 
-    assert AppSettings.from_env(environment).rpc_password == "from-file"
+    settings = AppSettings.from_env(environment)
+
+    assert settings.rpc_password == "from-file"
+    assert settings.rpc_password_file_configured is True
 
 
 @pytest.mark.parametrize(

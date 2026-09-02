@@ -23,19 +23,27 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
-      - name: Install test dependencies
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install Python test dependencies
         run: pip install --requirement requirements-test.txt
+      - name: Install JavaScript test dependencies
+        run: npm ci
+      - name: Install browser dependencies
+        run: npx playwright install --with-deps chromium
       - name: Check Python
         run: |
           python -m compileall -q src tests
           ruff format --check src tests
           ruff check src tests
       - name: Check JavaScript
-        run: node --check src/static/js/app.js && node --check src/static/js/as-diversity.js && node --check tests/test_as_diversity.js
+        run: npm run check:js
       - name: Run Python tests
         run: python -m pytest -q
       - name: Run JavaScript tests
-        run: node tests/test_as_diversity.js
+        run: |
+          npm run test:js
+          npm run test:layout
       - name: Validate container
         env:
           BITCOIN_RPC_USER: test

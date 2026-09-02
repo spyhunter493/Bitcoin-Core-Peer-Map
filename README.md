@@ -31,8 +31,8 @@ BITCOIN_RPC_PASSWORD=replace-with-a-long-random-password
 The `.env` file is the normal Compose configuration method and is excluded from Git.
 
 ```bash
-BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose up -d --build
-docker compose logs -f bpm
+./scripts/compose-local.sh up -d --build
+./scripts/compose-local.sh logs -f bpm
 ```
 
 Open `http://localhost:58333`.
@@ -102,6 +102,12 @@ the container. Most deployments should set `BITCOIN_RPC_PASSWORD` directly in `.
 *`BITCOIN_RPC_PASSWORD` is required unless `BITCOIN_RPC_PASSWORD_FILE` is used instead. Do not set
 both variables; the application will reject the configuration.*
 
+Inspect the effective runtime configuration without exposing RPC credentials:
+
+```bash
+curl http://localhost:58333/api/config
+```
+
 ### Optional Compose Secret
 
 The standard `.env` setup does not require a password file. Use this alternative only when the
@@ -143,10 +149,13 @@ RPC credentials are never written to the volume. Browser display preferences rem
 The header displays the first seven characters of the Git commit embedded in the image and links to that exact commit on GitHub. Pass the full commit SHA whenever the image is built:
 
 ```bash
-BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose build
+./scripts/compose-local.sh build
 ```
 
-GitHub Actions passes `GITHUB_SHA` directly to the Docker build. Images built without `BPM_BUILD_REVISION` display `unknown` rather than an inaccurate revision.
+The helper exports `BPM_BUILD_REVISION` from the current Git checkout before running Docker Compose.
+For dirty worktrees, it uses `unknown` so locally changed static assets get a fresh content-hash
+cache key. GitHub Actions passes `GITHUB_SHA` directly to the Docker build. Images built without
+`BPM_BUILD_REVISION` display `unknown` rather than an inaccurate revision.
 
 ## Container Security
 
@@ -165,7 +174,7 @@ Rebuild and recreate after pulling changes:
 
 ```bash
 git pull
-BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose up -d --build
+./scripts/compose-local.sh up -d --build
 ```
 
 Inspect status and health:
@@ -220,9 +229,10 @@ docker run --rm -v "$PWD:/source:ro" python:3.12-slim \
 Run the JavaScript checks:
 
 ```bash
-node --check src/static/js/app.js
-node --check src/static/js/as-diversity.js
-node tests/test_as_diversity.js
+npm ci
+npm run check:js
+npm run test:js
+npm run test:layout:docker
 ```
 
 Validate the deployment definition and image:
