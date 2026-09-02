@@ -5,11 +5,6 @@
    ============================================================ */
 
 /* ==========================================================
-   1. REMOVED — View toggle no longer needed (donut always visible)
-   ========================================================== */
-.as-view-toggle { display: none; }
-
-/* ==========================================================
    2. AS DIVERSITY CONTAINER — Upper-right corner of map
    ========================================================== */
 .as-diversity-container {
@@ -617,65 +612,6 @@ body.insight-rect-active .as-focused-close {
 }
 
 /* ==========================================================
-   5. HOVER TOOLTIP — Compact 3-line AS info
-   ========================================================== */
-.as-tooltip {
-    position: fixed;
-    z-index: 310;
-    background: var(--bg-surface);
-    border: 1px solid rgba(88, 166, 255, 0.2);
-    border-radius: 6px;
-    padding: 8px 12px;
-    pointer-events: none;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    max-width: 280px;
-    white-space: nowrap;
-}
-.as-tooltip.hidden { display: none; }
-
-.as-tt-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 3px;
-}
-.as-tt-number {
-    font-family: var(--font-data);
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--accent);
-}
-.as-tt-sep {
-    color: var(--text-dim);
-    font-size: 10px;
-}
-.as-tt-name {
-    font-family: var(--font-data);
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.as-tt-stats {
-    font-family: var(--font-data);
-    font-size: 10px;
-    color: var(--text-secondary);
-    margin-bottom: 2px;
-}
-.as-tt-risk {
-    font-family: var(--font-data);
-    font-size: 10px;
-    font-weight: 600;
-}
-.as-tt-risk-low      { color: var(--ok); }
-.as-tt-risk-moderate { color: var(--warn); }
-.as-tt-risk-high     { color: var(--err); }
-.as-tt-risk-critical { color: var(--err-bright); }
-
-/* ==========================================================
    6. DETAIL PANEL — Slide-in from right, PUSHES content
    ========================================================== */
 .as-detail-panel {
@@ -946,7 +882,6 @@ body.hud-solid .as-diversity-container {
 /* ==========================================================
    8. LIGHT THEME ADJUSTMENTS
    ========================================================== */
-body.theme-light .as-tt-number,
 body.theme-light .as-detail-asn { text-shadow: none; }
 body.theme-light .as-legend-header,
 body.theme-light .as-legend-name,
@@ -957,7 +892,6 @@ body.theme-light .as-score-label,
 body.theme-light .as-score-quality,
 body.theme-light .as-donut-title { text-shadow: none; }
 body.theme-light .as-detail-panel { border-left-color: rgba(88, 166, 255, 0.25); }
-body.theme-light .as-tooltip { border-color: rgba(88, 166, 255, 0.25); }
 body.theme-light .as-loading { color: var(--text-secondary); }
 
 /* ==========================================================
@@ -1205,68 +1139,6 @@ body.theme-light .as-loading { color: var(--text-secondary); }
     flex: 1;
 }
 
-/* Connection grid (Section 2) */
-.as-summary-grid {
-    margin: 4px 0 2px;
-}
-.as-grid-header {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 0;
-    border-bottom: 1px solid rgba(88, 166, 255, 0.1);
-    margin-bottom: 2px;
-}
-.as-grid-h-name {
-    flex: 1;
-    font-family: var(--font-data);
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-muted);
-}
-.as-grid-h-val {
-    width: 32px;
-    text-align: center;
-    font-family: var(--font-data);
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-muted);
-}
-.as-grid-row {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 0;
-    border-radius: 3px;
-    transition: background 0.15s ease;
-}
-.as-grid-row:hover {
-    background: rgba(88, 166, 255, 0.06);
-}
-.as-grid-name {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-family: var(--font-data);
-    font-size: 10px;
-    font-weight: 500;
-    cursor: pointer;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    transition: text-shadow 0.15s ease;
-}
-.as-grid-name:hover {
-    text-shadow: 0 0 6px currentColor;
-    text-decoration: underline;
-    text-decoration-color: currentColor;
-    text-underline-offset: 2px;
-}
 .as-grid-dot {
     width: 7px;
     height: 7px;
@@ -1274,25 +1146,6 @@ body.theme-light .as-loading { color: var(--text-secondary); }
     flex-shrink: 0;
     box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
 }
-.as-grid-val {
-    width: 32px;
-    text-align: center;
-    font-family: var(--font-data);
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-.as-grid-clickable {
-    cursor: pointer;
-    border-radius: 3px;
-    padding: 1px 4px;
-    transition: background 0.15s ease, color 0.15s ease;
-}
-.as-grid-clickable:hover {
-    background: rgba(88, 166, 255, 0.15);
-    color: var(--accent);
-}
-
 /* Connection provider rows (3-row layout per provider) */
 .as-conn-prov-row,
 .as-conn-others-row {
@@ -1521,31 +1374,6 @@ body.donut-focused .as-score-value.as-focused-provider {
     font-size: 10px;
     color: rgba(88, 166, 255, 0.7);
     font-weight: 600;
-}
-
-/* ==========================================================
-   15. PEER DETAIL PANEL — Section styles for full peer info
-   ========================================================== */
-.as-detail-section {
-    margin-bottom: 8px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid rgba(88, 166, 255, 0.06);
-}
-.as-detail-section:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-}
-.as-detail-sub-title {
-    font-family: var(--font-data);
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--accent, #58a6ff);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    margin-bottom: 4px;
-    padding-bottom: 2px;
 }
 
 /* ==========================================================
@@ -2132,51 +1960,6 @@ body.pn-panel-open .pn-container.pn-focused {
 }
 
 /* ==========================================================
-   PN4. Legend beneath donut
-   ========================================================== */
-.pn-legend {
-    display: none; /* Network selection happens via donut segments, not a separate legend */
-}
-.pn-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-family: var(--font-data, 'JetBrains Mono', monospace);
-    color: var(--text-secondary, #8b949e);
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 3px;
-    transition: background 0.15s ease, opacity 0.15s ease;
-}
-.pn-legend-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-}
-.pn-legend-item.dimmed {
-    opacity: 0.25;
-}
-.pn-legend-item.highlighted {
-    opacity: 1;
-    background: rgba(240, 136, 62, 0.08);
-}
-.pn-legend-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-.pn-legend-name {
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.pn-legend-count {
-    font-weight: 700;
-    color: var(--text-primary, #c9d1d9);
-}
-
-/* ==========================================================
    PN5. Detail Panel — slides in from right (like AS detail panel)
    ========================================================== */
 .pn-detail-panel {
@@ -2622,11 +2405,16 @@ body.private-net-mode .as-diversity-container {
 body.private-net-mode .as-detail-panel {
     display: none !important;
 }
-body.private-net-mode .as-tooltip {
-    display: none !important;
-}
 body.private-net-mode .peer-popup {
     display: none !important;
+}
+
+@media (max-width: 720px) {
+    .as-diversity-container {
+        right: 8px;
+        transform: scale(0.65);
+        transform-origin: top right;
+    }
 }
 
 /* ==========================================================

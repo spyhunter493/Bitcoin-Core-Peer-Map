@@ -55,6 +55,10 @@ class SystemMetrics:
         with self._lock:
             return dict(self._latest) if self._latest else None
 
+    def stop(self) -> None:
+        if self._thread:
+            self._thread.join(timeout=2)
+
     @staticmethod
     def _network_totals() -> tuple[int, int]:
         received = sent = 0
@@ -142,16 +146,6 @@ class SystemMetrics:
         }
         with self._lock:
             self._latest = snapshot
-
-    def network_speed(self) -> dict[str, Any]:
-        snapshot = self.latest()
-        if not snapshot:
-            return {"rx_bps": 0, "tx_bps": 0, "ts": time.time()}
-        return {
-            "rx_bps": snapshot["rx_bps"],
-            "tx_bps": snapshot["tx_bps"],
-            "ts": snapshot["ts"],
-        }
 
     def summary(self) -> dict[str, Any]:
         snapshot = self.latest() or {}

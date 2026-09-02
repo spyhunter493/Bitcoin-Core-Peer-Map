@@ -113,7 +113,7 @@ The named volume is mounted at `/var/lib/bitcoin-peer-map` and contains only mut
 
 - `geo.db`: peer geolocation cache
 - `settings.json`: dashboard preferences that must survive restarts
-- `tmp/`: transient GeoIP update files
+- `tmp/`: staging area for GeoIP database updates
 
 RPC credentials are never written to the volume. Browser display preferences remain in browser local storage under `bpm.*` keys.
 

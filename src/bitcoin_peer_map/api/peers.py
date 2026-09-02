@@ -1,13 +1,7 @@
 """Peer list and peer-management endpoints."""
 
-from __future__ import annotations
-
-import asyncio
-import json
-
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sse_starlette.sse import EventSourceResponse
 
 from ..runtime import AppRuntime
 from .dependencies import runtime_from
@@ -26,29 +20,6 @@ class AddressRequest(BaseModel):
 @router.get("/peers")
 def list_peers(runtime: AppRuntime = Depends(runtime_from)):
     return runtime.peers.list_peers()
-
-
-@router.get("/changes")
-def recent_changes(runtime: AppRuntime = Depends(runtime_from)):
-    return runtime.peers.recent_changes()
-
-
-@router.get("/events")
-async def peer_events(request: Request, runtime: AppRuntime = Depends(runtime_from)):
-    async def generate():
-        yield {"event": "message", "data": json.dumps({"type": "connected"})}
-        while not runtime.stop_event.is_set():
-            if await request.is_disconnected():
-                break
-            signaled = await asyncio.to_thread(runtime.peers.update_event.wait, 2)
-            if signaled:
-                runtime.peers.update_event.clear()
-                event_type = runtime.peers.last_update_type
-            else:
-                event_type = "keepalive"
-            yield {"event": "message", "data": json.dumps({"type": event_type})}
-
-    return EventSourceResponse(generate())
 
 
 @router.post("/peer/connect")

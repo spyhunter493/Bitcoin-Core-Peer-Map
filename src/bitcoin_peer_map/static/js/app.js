@@ -661,7 +661,6 @@
     // ═══════════════════════════════════════════════════════════
 
     let nodes = [];          // currently visible + fading-out nodes
-    let knownPeerIds = {};   // id -> true, tracks which peers we've seen
     let lastPeers = [];      // raw API response for table rendering
     let highlightedPeerId = null;  // peer ID highlighted via map↔table interaction
 
@@ -682,7 +681,6 @@
     let privateNetLinePeer = null;       // peer ID to draw line to in private mode
     let pnBigPopupEl = null;             // DOM element for the private peer big detail popup
     let pnMiniHover = false;             // true when hovering the mini donut in default view (draws lines)
-    let pnSavedEnabledNets = null;       // saved badge filter state before entering private mode
     let pnPreviewPeerIds = null;         // peer IDs to preview lines for (panel row hover)
     let pnMiniHoverNet = null;           // which network segment is hovered on the mini donut
     const PRIVATE_NETS = new Set(['onion', 'i2p', 'cjdns']);
@@ -693,7 +691,6 @@
     let pnInsightActiveType = null;      // 'stable' | 'fastest' | 'data-bytessent' | 'data-bytesrecv'
     let pnInsightActivePeerId = null;    // Peer ID of the active (selected) insight
     let pnInsightActiveData = null;      // Full data object for the active insight
-    let pnInsightHoverType = null;       // Type being hovered (for preview)
 
     // Network filter: Set of enabled network keys. When ALL networks are enabled, equivalent to "All".
     const ALL_NETS = new Set(['ipv4', 'ipv6', 'onion', 'i2p', 'cjdns']);
@@ -747,7 +744,6 @@
     // DOM references
     const clockEl = document.getElementById('clock');
     const tooltipEl = document.getElementById('node-tooltip');
-    const antNote = document.getElementById('antarctica-note');
     const antOverlay = document.getElementById('antarctica-modal-overlay');
     let hoveredNode = null;
     let pinnedNode = null;  // Tooltip pins when user clicks a node or table row
@@ -881,9 +877,6 @@
         cjdns: { full: 'CJDNS encrypted mesh network', label: 'CJDNS encrypted mesh network', isOverlay: true },
     };
 
-    // Map data-net attributes back to internal net keys
-    const FD_NET_KEY_MAP = { ipv4: 'ipv4', ipv6: 'ipv6', onion: 'onion', i2p: 'i2p', cjdns: 'cjdns' };
-
     function buildFdTooltip(netKey) {
         const info = FD_NET_INFO[netKey];
         if (!info) return '';
@@ -954,7 +947,6 @@
                 } else {
                     // Already in private mode — just switch to this network
                     pnSelectedNet = netKey;
-                    pnDonutFocused = true;
                     cachePnElements();
                     if (pnContainerEl) pnContainerEl.classList.add('pn-focused');
                     openPnDetailPanel(netKey);
@@ -999,7 +991,6 @@
 
     let btcCurrency = 'USD';
     let btcPriceInterval = 10;  // seconds
-    let lastBtcPrice = null;
     let btcPriceTimer = null;
 
     // ═══════════════════════════════════════════════════════════
@@ -1102,128 +1093,6 @@
             currencyDropdownEl = null;
         }
         document.removeEventListener('click', closeCurrencyOnOutside);
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // MEMPOOL MODAL
-    // ═══════════════════════════════════════════════════════════
-
-    function openMempoolModal() {
-        const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay';
-        overlay.id = 'mempool-modal';
-        overlay.innerHTML = `<div class="modal-box"><div class="modal-header"><span class="modal-title">Mempool Info</span><button class="modal-close" id="mempool-close">&times;</button></div><div class="modal-body" id="mempool-body"><div style="color:var(--text-muted);text-align:center;padding:16px">Loading...</div></div></div>`;
-        document.body.appendChild(overlay);
-        document.getElementById('mempool-close').addEventListener('click', () => overlay.remove());
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-
-        fetch(`/api/mempool?currency=${btcCurrency}`).then(r => r.json()).then(data => {
-            const body = document.getElementById('mempool-body');
-            if (!body) return;
-            if (data.error) { body.innerHTML = `<div style="color:var(--err)">${data.error}</div>`; return; }
-            const mp = data.mempool;
-            if (!mp) { body.innerHTML = '<div style="color:var(--text-muted)">No data</div>'; return; }
-            const price = data.btc_price || 0;
-            let html = '';
-            html += `<div class="modal-row"><span class="modal-label">Pending Transactions</span><span class="modal-val modal-val-highlight">${(mp.size || 0).toLocaleString()}</span></div>`;
-            html += `<div class="modal-row"><span class="modal-label">Data Size</span><span class="modal-val">${((mp.bytes || 0) / 1e6).toFixed(2)} MB</span></div>`;
-            html += `<div class="modal-row"><span class="modal-label">Memory Usage</span><span class="modal-val">${((mp.usage || 0) / 1e6).toFixed(2)} MB</span></div>`;
-            const totalFeesBTC = mp.total_fee || 0;
-            const feesMeta = CURRENCY_META[btcCurrency] || { symbol: '$', decimals: 2 };
-            const totalFeesFiat = price ? ` (${feesMeta.symbol}${(totalFeesBTC * price).toFixed(feesMeta.decimals)})` : '';
-            html += `<div class="modal-row"><span class="modal-label">Total Fees</span><span class="modal-val">${totalFeesBTC.toFixed(8)} BTC${totalFeesFiat}</span></div>`;
-            html += `<div class="modal-row"><span class="modal-label">Max Mempool Size</span><span class="modal-val">${((mp.maxmempool || 0) / 1e6).toFixed(0)} MB</span></div>`;
-            if (mp.mempoolminfee != null) {
-                const satVb = (mp.mempoolminfee * 1e8 / 1000).toFixed(2);
-                html += `<div class="modal-row"><span class="modal-label">Min Accepted Fee</span><span class="modal-val">${satVb} sat/vB</span></div>`;
-            }
-            if (mp.minrelaytxfee != null) {
-                const satVb = (mp.minrelaytxfee * 1e8 / 1000).toFixed(2);
-                html += `<div class="modal-row"><span class="modal-label">Min Relay Fee</span><span class="modal-val">${satVb} sat/vB</span></div>`;
-            }
-            if (mp.incrementalrelayfee != null) {
-                const satVb = (mp.incrementalrelayfee * 1e8 / 1000).toFixed(2);
-                html += `<div class="modal-row"><span class="modal-label">RBF Increment</span><span class="modal-val">${satVb} sat/vB</span></div>`;
-            }
-            if (mp.unbroadcastcount != null) {
-                const cls = mp.unbroadcastcount === 0 ? 'modal-val-ok' : 'modal-val-highlight';
-                html += `<div class="modal-row"><span class="modal-label">Unbroadcast Txs</span><span class="modal-val ${cls}">${mp.unbroadcastcount}</span></div>`;
-            }
-            if (mp.fullrbf != null) {
-                const cls = mp.fullrbf ? 'modal-val-ok' : 'modal-val-warn';
-                html += `<div class="modal-row"><span class="modal-label">Full RBF</span><span class="modal-val ${cls}">${mp.fullrbf ? 'Enabled' : 'Disabled'}</span></div>`;
-            }
-            body.innerHTML = html;
-        }).catch(err => {
-            const body = document.getElementById('mempool-body');
-            if (body) body.innerHTML = `<div style="color:var(--err)">Error: ${err.message}</div>`;
-        });
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // BLOCKCHAIN MODAL
-    // ═══════════════════════════════════════════════════════════
-
-    function openBlockchainModal() {
-        const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay';
-        overlay.id = 'blockchain-modal';
-        overlay.innerHTML = `<div class="modal-box"><div class="modal-header"><span class="modal-title">Blockchain Info</span><button class="modal-close" id="blockchain-close">&times;</button></div><div class="modal-body" id="blockchain-body"><div style="color:var(--text-muted);text-align:center;padding:16px">Loading...</div></div></div>`;
-        document.body.appendChild(overlay);
-        document.getElementById('blockchain-close').addEventListener('click', () => overlay.remove());
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-
-        fetch('/api/blockchain').then(r => r.json()).then(data => {
-            const body = document.getElementById('blockchain-body');
-            if (!body) return;
-            if (data.error) { body.innerHTML = `<div style="color:var(--err)">${data.error}</div>`; return; }
-            const bc = data.blockchain;
-            if (!bc) { body.innerHTML = '<div style="color:var(--text-muted)">No data</div>'; return; }
-            let html = '';
-            html += `<div class="modal-row"><span class="modal-label">Chain</span><span class="modal-val modal-val-highlight">${bc.chain || '—'}</span></div>`;
-            html += `<div class="modal-row"><span class="modal-label">Block Height</span><span class="modal-val modal-val-ok">${(bc.blocks || 0).toLocaleString()}</span></div>`;
-            if (bc.headers) {
-                const pct = bc.blocks && bc.headers ? ((bc.blocks / bc.headers) * 100).toFixed(2) : '100';
-                html += `<div class="modal-row"><span class="modal-label">Sync Progress</span><span class="modal-val">${bc.blocks.toLocaleString()} / ${bc.headers.toLocaleString()} (${pct}%)</span></div>`;
-            }
-            if (bc.bestblockhash) {
-                const short = bc.bestblockhash.substring(0, 20) + '...';
-                html += `<div class="modal-row"><span class="modal-label">Best Block Hash</span><span class="modal-val" title="${bc.bestblockhash}">${short}</span></div>`;
-            }
-            if (bc.difficulty) {
-                const diff = parseFloat(bc.difficulty);
-                const humanDiff = diff > 1e12 ? (diff / 1e12).toFixed(2) + 'T' : diff.toLocaleString();
-                html += `<div class="modal-row"><span class="modal-label">Difficulty</span><span class="modal-val" title="${bc.difficulty}">${humanDiff}</span></div>`;
-            }
-            if (bc.mediantime) {
-                html += `<div class="modal-row"><span class="modal-label">Median Time</span><span class="modal-val">${new Date(bc.mediantime * 1000).toLocaleString()}</span></div>`;
-            }
-            if (bc.chainwork) {
-                const short = bc.chainwork.substring(0, 20) + '...';
-                html += `<div class="modal-row"><span class="modal-label">Chain Work</span><span class="modal-val" title="${bc.chainwork}">${short}</span></div>`;
-            }
-            html += `<div class="modal-row"><span class="modal-label">IBD Status</span><span class="modal-val ${bc.initialblockdownload ? 'modal-val-warn' : 'modal-val-ok'}">${bc.initialblockdownload ? 'Yes' : 'No'}</span></div>`;
-            if (bc.size_on_disk) {
-                html += `<div class="modal-row"><span class="modal-label">Size on Disk</span><span class="modal-val">${(bc.size_on_disk / 1e9).toFixed(1)} GB</span></div>`;
-            }
-            html += `<div class="modal-row"><span class="modal-label">Pruning</span><span class="modal-val">${bc.pruned ? 'Yes' : 'No'}</span></div>`;
-            if (bc.pruned && bc.pruneheight) {
-                html += `<div class="modal-row"><span class="modal-label">Prune Height</span><span class="modal-val">${bc.pruneheight.toLocaleString()}</span></div>`;
-            }
-            // Softforks
-            if (bc.softforks && Object.keys(bc.softforks).length > 0) {
-                html += '<div class="modal-section-title">Softforks</div>';
-                for (const [name, sf] of Object.entries(bc.softforks)) {
-                    const status = sf.active ? 'Active' : (sf.type || 'Defined');
-                    const cls = sf.active ? 'modal-val-ok' : '';
-                    html += `<div class="modal-row"><span class="modal-label">${name}</span><span class="modal-val ${cls}">${status}</span></div>`;
-                }
-            }
-            body.innerHTML = html;
-        }).catch(err => {
-            const body = document.getElementById('blockchain-body');
-            if (body) body.innerHTML = `<div style="color:var(--err)">Error: ${err.message}</div>`;
-        });
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -1480,7 +1349,6 @@
     let pnCenterCount = null;
     let pnCenterLabel = null;
     let pnCenterSub = null;
-    let pnLegendEl = null;
     let pnDetailPanelEl = null;
     let pnDetailBodyEl = null;
     let pnDetailBodyHandlerAttached = false;  // guard against re-registering click handler
@@ -1491,14 +1359,11 @@
     let pnSegments = [];           // Array of { net, count, color, label }
     let pnSelectedNet = null;      // Currently selected donut segment (null = overview/all)
     let pnHoveredNet = null;       // Network type hovered on the donut (for peer preview/dimming)
-    let pnDonutFocused = false;    // Donut in focused mode (moved to top-center)
     let pnPopupTimer = null;       // Timer ID for pending popup show (prevents race conditions)
 
     // Sub-tooltip state
     let pnSubTooltipPinned = false;
     let pnPinnedSubSrc = null;
-    let pnPinnedSubHtml = '';
-    let pnSubSubTooltipPinned = false;
     let pnCenterPreviewLabel = null;   // Label of active PN center preview (for data refresh preservation)
     let pnCenterPreviewPeerIds = null; // Peer IDs of active PN center preview
 
@@ -1509,7 +1374,6 @@
             pnCenterCount = document.getElementById('pn-center-count');
             pnCenterLabel = document.getElementById('pn-center-label');
             pnCenterSub = document.getElementById('pn-center-sub');
-            pnLegendEl = document.getElementById('pn-legend');
             pnDetailPanelEl = document.getElementById('pn-detail-panel');
             pnDetailBodyEl = document.getElementById('pn-detail-body');
             pnDetailNetNameEl = document.getElementById('pn-detail-net-name');
@@ -1558,12 +1422,10 @@
 
         // Reset state — but apply targetNet if provided
         pnSelectedNet = targetNet || null;
-        pnDonutFocused = false;
         hidePnSubTooltip();
         pnMiniHover = false;
 
         // Switch badge filters to only active private networks
-        pnSavedEnabledNets = new Set(enabledNets);
         const activePrivateNets = new Set();
         for (const n of nodes) {
             if (n.alive && PRIVATE_NETS.has(n.net)) activePrivateNets.add(n.net);
@@ -1587,7 +1449,6 @@
         targetView.zoom = 1.8;
 
         // Focus the donut and open panel
-        pnDonutFocused = true;
         updatePrivateNetUI();
         if (targetNet) {
             // Go directly to the target network's detail panel
@@ -1610,7 +1471,6 @@
         privateNetLinePeer = null;
         pnSelectedNet = null;
         pnHoveredNet = null;
-        pnDonutFocused = false;
         pnPreviewPeerIds = null;
 
         // Clear insight rect state
@@ -1618,7 +1478,6 @@
         pnInsightActiveType = null;
         pnInsightActivePeerId = null;
         pnInsightActiveData = null;
-        pnInsightHoverType = null;
 
         document.body.classList.remove('private-net-mode', 'pn-panel-open');
 
@@ -1645,7 +1504,6 @@
 
         // Restore badge filters to All (or previous state)
         enabledNets = new Set(ALL_NETS);
-        pnSavedEnabledNets = null;
         updateBadgeStates();
 
         // Zoom back to world view
@@ -1686,7 +1544,6 @@
 
         // Move donut to top-center (focused state)
         cachePnElements();
-        pnDonutFocused = true;
         if (pnContainerEl) pnContainerEl.classList.add('pn-focused');
 
         // Cancel any pending popup timer, close existing popup immediately (sync),
@@ -1917,14 +1774,6 @@
                 else el.classList.remove('dimmed');
             });
         }
-        // Dim non-matching legend items
-        const pnLegendEl = document.getElementById('pn-legend');
-        if (pnLegendEl) {
-            pnLegendEl.querySelectorAll('.pn-legend-item').forEach(el => {
-                if (el.dataset.net !== net) el.classList.add('dimmed');
-                else { el.classList.remove('dimmed'); el.classList.add('highlighted'); }
-            });
-        }
     }
 
     /** Leave a donut segment → restore center, undim, clear hover lines */
@@ -1952,13 +1801,6 @@
                 el.classList.remove('dimmed');
             });
         }
-        // Undim legend items
-        const pnLegendEl = document.getElementById('pn-legend');
-        if (pnLegendEl) {
-            pnLegendEl.querySelectorAll('.pn-legend-item').forEach(el => {
-                el.classList.remove('dimmed', 'highlighted');
-            });
-        }
     }
 
     /** Handle click on a donut segment */
@@ -1980,40 +1822,16 @@
             document.body.classList.remove('pn-panel-open');
             // In private mode, donut always stays centered at top
             if (!privateNetMode) {
-                pnDonutFocused = false;
                 cachePnElements();
                 if (pnContainerEl) pnContainerEl.classList.remove('pn-focused');
             }
         } else {
             pnSelectedNet = net;
-            pnDonutFocused = true;
             cachePnElements();
             if (pnContainerEl) pnContainerEl.classList.add('pn-focused');
             openPnDetailPanel(net);
         }
         updatePrivateNetUI();
-    }
-
-    /** Render legend below the donut */
-    function renderPnLegend() {
-        if (!pnLegendEl) return;
-        const activeNet = pnSelectedNet || (privateNetSelectedPeer ? privateNetSelectedPeer.net : null);
-        let legendHtml = '';
-        for (const seg of pnSegments) {
-            const isActive = activeNet === seg.net;
-            const isDimmed = activeNet && activeNet !== seg.net;
-            const style = isDimmed ? 'opacity:0.4' : '';
-            const activeBg = isActive ? 'background:rgba(255,255,255,0.08)' : '';
-            legendHtml += '<div class="pn-legend-item" data-net="' + seg.net + '" style="' + style + ';' + activeBg + '">';
-            legendHtml += '<span class="pn-legend-dot" style="background:' + seg.color + '"></span>';
-            legendHtml += '<span class="pn-legend-name">' + seg.label + '</span>';
-            legendHtml += '<span class="pn-legend-count">' + seg.count + '</span>';
-            legendHtml += '</div>';
-        }
-        if (pnSegments.length === 0) {
-            legendHtml = '<div class="pn-legend-item"><span class="pn-legend-name" style="color:var(--text-muted)">No private peers connected</span></div>';
-        }
-        pnLegendEl.innerHTML = legendHtml;
     }
 
     // ── Detail Panel (slides in from right, like AS detail panel) ──
@@ -2335,7 +2153,6 @@
                 if (pnSubTooltipPinned) return;  // Don't preview when sub-tooltip is open
                 const peerId = parseInt(row.dataset.peerId);
                 const insightType = row.dataset.insightType;
-                const peerNet = row.dataset.peerNet;
                 if (!peerId || !insightType) return;
 
                 // Find the peer in current data
@@ -2344,7 +2161,6 @@
                 const peer = rawPeers.find(p => p.id === peerId);
                 if (!peer) return;
 
-                pnInsightHoverType = insightType;
                 row.classList.add('pn-insight-hover');
 
                 // Preview: show rectangle, draw line to this peer
@@ -2358,7 +2174,6 @@
                 if (pnInsightActiveType) return; // Don't dismiss if pinned
                 if (pnSubTooltipPinned) return;  // Was suppressed on enter
                 row.classList.remove('pn-insight-hover');
-                pnInsightHoverType = null;
                 hidePnInsightRect();
                 pnPreviewPeerIds = null;
                 privateNetLinePeer = null;
@@ -2637,7 +2452,6 @@
         pnInsightActiveType = null;
         pnInsightActivePeerId = null;
         pnInsightActiveData = null;
-        pnInsightHoverType = null;
         privateNetLinePeer = null;
         privateNetSelectedPeer = null;
         pnPreviewPeerIds = null;
@@ -2776,7 +2590,6 @@
         }
         pnSubTooltipPinned = false;
         pnPinnedSubSrc = null;
-        pnPinnedSubHtml = '';
         pnPreviewPeerIds = null;
         // Clear PN center preview state so stale category text doesn't persist
         // across refreshes when the tooltip is dismissed without restorePnCenterText()
@@ -2788,7 +2601,6 @@
     function pinPnSubTooltip(html, srcEl) {
         pnSubTooltipPinned = true;
         pnPinnedSubSrc = srcEl || null;
-        pnPinnedSubHtml = html;
         const tip = document.getElementById('pn-sub-tooltip');
         if (tip) tip.style.pointerEvents = 'auto';
     }
@@ -2872,40 +2684,6 @@
         }
     }
 
-    // ── Sub-Sub-Tooltip (third level, for network-then-peers cascade) ──
-
-    function showPnSubSubTooltip(html, event) {
-        let tip = document.getElementById('pn-sub-sub-tooltip');
-        if (!tip) {
-            tip = document.createElement('div');
-            tip.id = 'pn-sub-sub-tooltip';
-            tip.className = 'as-sub-tooltip pn-sub-tooltip pn-sub-sub-tooltip';
-            document.body.appendChild(tip);
-        }
-        tip.innerHTML = html;
-        tip.classList.remove('hidden');
-        tip.style.display = '';
-        tip.style.pointerEvents = 'auto';
-        positionPnSubSubTooltip(event);
-        attachPnSubTooltipHandlers(tip);
-    }
-
-    function positionPnSubSubTooltip(event) {
-        const tip = document.getElementById('pn-sub-sub-tooltip');
-        if (!tip) return;
-        const subTip = document.getElementById('pn-sub-tooltip');
-        const rect = tip.getBoundingClientRect();
-        const pad = 12;
-        const anchor = subTip ? subTip.getBoundingClientRect() : (pnDetailPanelEl ? pnDetailPanelEl.getBoundingClientRect() : { left: window.innerWidth });
-        let x = anchor.left - rect.width - pad;
-        if (x < pad) x = pad;
-        let y = event ? event.clientY - rect.height / 2 : anchor.top;
-        if (y < pad) y = pad;
-        if (y + rect.height > window.innerHeight - pad) y = window.innerHeight - rect.height - pad;
-        tip.style.left = x + 'px';
-        tip.style.top = y + 'px';
-    }
-
     function hidePnSubSubTooltip() {
         const tip = document.getElementById('pn-sub-sub-tooltip');
         if (tip) {
@@ -2919,15 +2697,9 @@
             tip.style.display = 'none';
             tip.style.pointerEvents = 'none';
         }
-        pnSubSubTooltipPinned = false;
     }
 
     // ── Utility helpers ──
-
-    function getComputedNetColor(varName) {
-        const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-        return raw || null;
-    }
 
     function fmtBytesShort(bytes) {
         if (!bytes || bytes <= 0) return '0 B';
@@ -2935,13 +2707,6 @@
         let i = 0, v = bytes;
         while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
         return v.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
-    }
-
-    function fmtDurationShort(sec) {
-        if (sec < 60) return sec + 's';
-        if (sec < 3600) return Math.floor(sec / 60) + 'm';
-        if (sec < 86400) return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm';
-        return Math.floor(sec / 86400) + 'd ' + Math.floor((sec % 86400) / 3600) + 'h';
     }
 
     /** Update all private network UI (donut + panel if open).
@@ -2953,9 +2718,6 @@
         // Save donut state before rebuild
         const savedSelectedNet = pnSelectedNet;
         const savedHoveredNet = pnHoveredNet;
-        const savedLinePeer = privateNetLinePeer;
-        const savedSelectedPeer = privateNetSelectedPeer;
-
         // Save insight rect state before rebuild
         const savedInsightType = pnInsightActiveType;
         const savedInsightPeerId = pnInsightActivePeerId;
@@ -2975,13 +2737,6 @@
             pnDonutSvg.querySelectorAll('.pn-donut-segment').forEach(el => {
                 if (el.dataset.net !== savedHoveredNet) el.classList.add('dimmed');
             });
-            const pnLegendEl = document.getElementById('pn-legend');
-            if (pnLegendEl) {
-                pnLegendEl.querySelectorAll('.pn-legend-item').forEach(el => {
-                    if (el.dataset.net !== savedHoveredNet) el.classList.add('dimmed');
-                    else { el.classList.remove('dimmed'); el.classList.add('highlighted'); }
-                });
-            }
         }
 
         // If insight rect was visible, re-hide the donut SVG/center (renderPnDonut restores them)
@@ -3300,26 +3055,6 @@
         return null;
     }
 
-    /** Get the page-coords origin for a private network's legend dot in the big donut.
-     *  Returns {x, y} or null. */
-    function getPnLegendDotPos(net) {
-        const legendEl = document.getElementById('pn-legend');
-        if (!legendEl) return null;
-        const items = legendEl.querySelectorAll('.pn-legend-item');
-        for (const item of items) {
-            if (item.dataset.net === net) {
-                const dot = item.querySelector('.pn-legend-dot');
-                if (dot) {
-                    const r = dot.getBoundingClientRect();
-                    if (r.width > 0 && r.height > 0) {
-                        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
     /** Draw lines from the donut to private peers.
      *  Priority chain (first match wins):
      *  1. pnPreviewPeerIds set (panel row hover) → lines to those specific peers
@@ -3379,7 +3114,7 @@
         ctx.lineWidth = lineW;
 
         for (const node of privateNodes) {
-            // Determine origin: insight rect origin > legend dot per network > donut center
+            // Determine origin: insight rect, mini legend dot, or donut center.
             let originX = fallbackOriginX;
             let originY = fallbackOriginY;
             if (pnInsightRectVisible && privateNetMode) {
@@ -3391,12 +3126,6 @@
                 }
             } else if (pnMiniHover && !privateNetMode) {
                 const dotPos = getPnMiniLegendDotPos(node.net);
-                if (dotPos) {
-                    originX = (dotPos.x - canvasRect.left) * (W / canvasRect.width);
-                    originY = (dotPos.y - canvasRect.top) * (H / canvasRect.height);
-                }
-            } else if (privateNetMode) {
-                const dotPos = getPnLegendDotPos(node.net);
                 if (dotPos) {
                     originX = (dotPos.x - canvasRect.left) * (W / canvasRect.width);
                     originY = (dotPos.y - canvasRect.top) * (H / canvasRect.height);
@@ -3753,7 +3482,6 @@
                 pinnedNode = null;
                 // In private mode, donut stays centered; otherwise return to corner
                 if (!privateNetMode && !pnSelectedNet) {
-                    pnDonutFocused = false;
                     cachePnElements();
                     if (pnContainerEl) pnContainerEl.classList.remove('pn-focused');
                 }
@@ -4159,7 +3887,6 @@
     // DATA FETCHING — Node info from /api/info (block height)
     // ═══════════════════════════════════════════════════════════
 
-    let lastBlockHeight = null;
     let lastNodeInfo = null;  // Full /api/info response for Node Info card
 
     // Track previous internet state for toast notifications
@@ -4322,11 +4049,6 @@
             // Check if we should show the API-down prompt
             if (info.internet_state === 'green' && info.api_available === false && !info.geo_db_only_mode) {
                 checkApiDownPrompt();
-            }
-
-            // Update block height (stored for modals and map overlay)
-            if (info.last_block && info.last_block.height) {
-                lastBlockHeight = info.last_block.height;
             }
 
             // Update BTC price in topbar
@@ -4506,7 +4228,6 @@
     /** Update BTC Price in left map overlay + ₿ symbol coloring */
     function updateBtcPricePanel(info) {
         const priceEl = document.getElementById('mo-btc-price');
-        const symbolEl = document.getElementById('mo-btc-symbol');
         const arrowEl = document.getElementById('mo-btc-arrow');
         if (!priceEl) return;
 
@@ -5496,7 +5217,6 @@
     let countdownInterval = null;
     // Poll timer IDs (stored so they can be restarted when settings change)
     let peerPollTimer = null;
-    let changesPollTimer = null;
 
     function startCountdownTimer() {
         if (countdownInterval) clearInterval(countdownInterval);
@@ -5630,12 +5350,6 @@
             }
         }
         return result;
-    }
-
-    /** Find the nearest alive node within hit radius (legacy convenience). */
-    function findNodeAtScreen(sx, sy) {
-        const group = findNodesAtScreen(sx, sy);
-        return group.length > 0 ? group[0] : null;
     }
 
     /** Build a tooltip row: label + value, skipping empty values */
@@ -5915,45 +5629,6 @@
         }
     }
 
-    /** Display comprehensive tooltip near cursor with peer details.
-     *  When pinned=true, tooltip gets pointer-events and a disconnect button. */
-    function showTooltip(node, mx, my, pinned) {
-        tooltipEl.innerHTML = buildPeerDetailHtml(node, pinned, false);
-        tooltipEl.classList.remove('hidden');
-
-        // Pinned tooltips are interactive (clickable buttons)
-        if (pinned) {
-            tooltipEl.classList.add('pinned');
-            tooltipEl.style.pointerEvents = 'auto';
-            // Bind disconnect button
-            const dcBtn = tooltipEl.querySelector('.tt-disconnect');
-            if (dcBtn) {
-                dcBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    showDisconnectDialog(parseInt(dcBtn.dataset.id), dcBtn.dataset.net);
-                });
-            }
-            // Bind exit link
-            const exitLink = tooltipEl.querySelector('.tt-exit-link');
-            if (exitLink) {
-                exitLink.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    pinnedNode = null;
-                    highlightedPeerId = null;
-                    clearMapDotFilter();
-                    hideTooltip();
-                    highlightTableRow(null);
-                });
-            }
-        } else {
-            tooltipEl.classList.remove('pinned');
-            tooltipEl.style.pointerEvents = 'none';
-        }
-
-        positionTooltip(mx, my);
-    }
-
     function hideTooltip() {
         tooltipEl.classList.add('hidden');
         tooltipEl.classList.remove('pinned');
@@ -6001,16 +5676,6 @@
         'feeler': 'FLR',
         'inbound': 'IN',
     };
-    const CONN_TYPE_FULL = {
-        'OFR': 'Outbound Full Relay',
-        'BRO': 'Block Relay Only',
-        'MAN': 'Manual',
-        'AF': 'Address Fetch',
-        'FLR': 'Feeler',
-        'IN': 'Inbound',
-        'OUT': 'Outbound',
-    };
-
     /** Get short type string for a peer and its full description */
     function peerTypeShort(p) {
         const dir = p.direction === 'IN' ? 'IN' : 'OUT';
@@ -6367,7 +6032,6 @@
     }
 
     // ── Column drag-to-reorder ──
-    let colDragState = null;
     let colDragIndicator = null;
 
     function handleTheadDragStart(e) {
@@ -6378,13 +6042,11 @@
 
         const key = th.dataset.sort;
         const startX = e.clientX;
-        const startY = e.clientY;
         const thRect = th.getBoundingClientRect();
         let moved = false;
 
         const onMove = (me) => {
             const dx = me.clientX - startX;
-            const dy = me.clientY - startY;
             // Only activate drag after 10px horizontal movement
             if (!moved && Math.abs(dx) < 10) return;
             if (!moved) {
@@ -6573,7 +6235,6 @@
                 applyPanelOpacity();
                 // Reset Antarctica setting
                 showAntarcticaPeers = true;
-                antNoteDismissed = false;
                 // Reset visible rows to default
                 maxPeerRows = 10;
                 applyMaxPeerRows();
@@ -7323,7 +6984,6 @@
                     }
                     // In private mode, donut stays centered; otherwise un-focus if no panel
                     if (!privateNetMode && !pnSelectedNet) {
-                        pnDonutFocused = false;
                         cachePnElements();
                         if (pnContainerEl) pnContainerEl.classList.remove('pn-focused');
                     }
@@ -7369,13 +7029,11 @@
                         renderPeerTable();
 
                         // [AS-DIVERSITY] Open full peer detail in right panel FIRST
-                        let bigPopup = false;
                         if (ASD) {
                             const rawPeers = ASD.getLastPeersRaw();
                             const peerData = rawPeers.find(p => p.id === node.peerId);
                             if (peerData) {
                                 ASD.openPeerDetailPanel(peerData, 'map');
-                                bigPopup = true;
                             }
                         }
 
@@ -7549,7 +7207,6 @@
     const netBadges = document.querySelectorAll('.handle-nets .net-badge');
     const netPopover = document.getElementById('net-popover');
     const antCloseBtn = document.getElementById('ant-close');
-    let antNoteDismissed = false;  // tracks if user dismissed the annotation this session
     let showAntarcticaPeers = true; // setting: show private network peers in Antarctica (default ON)
 
     /** Update badge visual states to reflect the current multi-select filter */
@@ -7594,12 +7251,6 @@
                     }
                 } else {
                     enabledNets.add(net);
-                    // If all nets are now enabled, switch back to "All" state
-                    if (enabledNets.size === ALL_NETS.size) {
-                        var allMatch = true;
-                        for (var n of ALL_NETS) { if (!enabledNets.has(n)) { allMatch = false; break; } }
-                        // Already a full set, state is naturally "all"
-                    }
                 }
             }
             updateBadgeStates();
@@ -7627,14 +7278,12 @@
     if (antCloseBtn) {
         antCloseBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            antNoteDismissed = true;
             if (antOverlay) antOverlay.classList.add('hidden');
         });
     }
     if (antOverlay) {
         antOverlay.addEventListener('click', (e) => {
             if (e.target === antOverlay) {
-                antNoteDismissed = true;
                 antOverlay.classList.add('hidden');
             }
         });
@@ -7773,11 +7422,9 @@
                 const v = clamp(parseInt(pollInput.value) || 10, 3, 120);
                 pollInput.value = v;
                 CFG.pollInterval = v * 1000;
-                // Restart peer + changes poll timers at the new interval
+                // Restart the peer poll timer at the new interval
                 if (peerPollTimer) clearInterval(peerPollTimer);
                 peerPollTimer = setInterval(fetchPeers, CFG.pollInterval);
-                if (changesPollTimer) clearInterval(changesPollTimer);
-                changesPollTimer = setInterval(fetchChanges, CFG.pollInterval);
                 // Restart countdown display so it uses the new interval
                 lastPeerFetchTime = Date.now();
                 startCountdownTimer();
@@ -8066,28 +7713,6 @@
                 if (target) target.style.display = cb.checked ? '' : 'none';
             });
         });
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // RECENT CHANGES FEED — from /api/changes
-    // ═══════════════════════════════════════════════════════════
-
-    async function fetchChanges() {
-        try {
-            const resp = await fetch('/api/changes');
-            if (!resp.ok) return;
-            const changes = await resp.json();
-            renderChangesCard(changes);
-        } catch (err) {
-            console.error('[Bitcoin Peer Map] Failed to fetch changes:', err);
-        }
-    }
-
-    // Changes are now rendered inside the System Info modal
-    // renderChangesCard just stores the data for on-demand rendering
-    let lastChanges = null;
-    function renderChangesCard(changes) {
-        lastChanges = changes;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -8769,17 +8394,6 @@
             dimMapPeers: function (peerIds) {
                 asFilterPeerIds = peerIds ? new Set(peerIds) : null;
             },
-            getWorldToScreen: worldToScreen,
-            selectPeerById: function (peerId) {
-                // Find the node on the map by peer ID — full deselect (closes AS panel)
-                const node = nodes.find(n => n.peerId === peerId && n.alive);
-                if (!node) return;
-                if (window.ASDiversity) {
-                    window.ASDiversity.deselect();
-                }
-                zoomToPeer(node);
-                highlightTableRow(node.peerId);
-            },
             zoomToPeerOnly: function (peerId) {
                 // Zoom to peer without touching sub-panels or lines — just zoom + highlight
                 const node = nodes.find(n => n.peerId === peerId && n.alive);
@@ -8948,7 +8562,6 @@
                     closePnBigPopup();
                 }
                 // Move donut to center and open overview panel
-                pnDonutFocused = true;
                 cachePnElements();
                 if (pnContainerEl) pnContainerEl.classList.add('pn-focused');
                 openPnOverviewPanel();
@@ -8987,35 +8600,6 @@
                 exitPrivateNetMode();
             }
         });
-
-        // [PRIVATE-NET] Legend clicks — click a network label to select that segment
-        cachePnElements();
-        if (pnLegendEl) {
-            pnLegendEl.addEventListener('click', (e) => {
-                const item = e.target.closest('.pn-legend-item');
-                if (!item) return;
-                const net = item.dataset.net;
-                if (!net) return;
-                // Simulate segment click
-                if (pnSelectedNet === net) {
-                    pnSelectedNet = null;
-                    closePnDetailPanel();
-                    // In private mode, donut stays centered
-                    if (!privateNetMode) {
-                        pnDonutFocused = false;
-                        cachePnElements();
-                        if (pnContainerEl) pnContainerEl.classList.remove('pn-focused');
-                    }
-                } else {
-                    pnSelectedNet = net;
-                    pnDonutFocused = true;
-                    cachePnElements();
-                    if (pnContainerEl) pnContainerEl.classList.add('pn-focused');
-                    openPnDetailPanel(net);
-                }
-                updatePrivateNetUI();
-            });
-        }
 
     }
 
@@ -9069,10 +8653,6 @@
         fetchSystemStats();
         // Re-fetch full stats every 30s for modal freshness (uptime, load, disk only)
         setInterval(fetchSystemStats, 30000);
-
-        // Fetch recent changes immediately, then poll every 10s
-        fetchChanges();
-        changesPollTimer = setInterval(fetchChanges, CFG.pollInterval);
 
         // Show Antarctica modal on every page load (if setting is ON)
         if (showAntarcticaPeers && antOverlay) {

@@ -39,7 +39,6 @@ window.ASDiversity = (function () {
     // STATE
     // ═══════════════════════════════════════════════════════════
 
-    let isActive = true;           // Always active now (no toggle)
     let asGroups = [];             // Aggregated AS data (sorted by count desc)
     let donutSegments = [];        // Top N + Others for donut rendering
     let hoveredAs = null;          // AS number string currently hovered
@@ -72,7 +71,6 @@ window.ASDiversity = (function () {
     let donutSvg = null;
     let donutCenter = null;
     let legendEl = null;
-    let tooltipEl = null;
     let panelEl = null;
     let loadingEl = null;
     let focusedCloseBtn = null;
@@ -86,9 +84,7 @@ window.ASDiversity = (function () {
     let subSubFilterPeerIds = null;  // Peer IDs at sub-sub level (specific provider within a category drill-down)
     let subSubFilterAsNum = null;    // AS number for the sub-sub drill-down provider
     let subSubFilterColor = null;    // Line color for the sub-sub drill-down provider
-    let pinnedSubTooltipHtml = null; // HTML of the pinned sub-tooltip (for restore after hover preview)
     let pinnedSubTooltipSrc = null;  // Source element that opened the pinned sub-tooltip
-    let pinnedSubTooltipSetup = null; // fn(tip) — re-attach handlers when restoring pinned tooltip
     let lastPeersRaw = [];         // Raw peers from last update (for summary computation)
     let panelHistory = [];         // Navigation stack [{type:'summary'|'provider', asNumber?, scrollTop?}]
     let peerDetailActive = false;  // True when peer detail panel is shown (from peer list/map click)
@@ -109,8 +105,6 @@ window.ASDiversity = (function () {
     let _clearAsLines = null;      // fn() — clear AS lines from canvas
     let _filterPeerTable = null;   // fn(peerIds | null) — filter peer table
     let _dimMapPeers = null;       // fn(peerIds | null) — dim non-matching peers
-    let _getWorldToScreen = null;  // fn(lon, lat) => {x, y}
-    let _selectPeerById = null;    // fn(peerId) — select a peer on the map by ID (full deselect)
     let _zoomToPeerOnly = null;    // fn(peerId) — zoom to peer without deselecting AS panel
     let _resetMapZoom = null;      // fn() — smoothly zoom the map back to default view
     let _clearPeerSelection = null; // fn() — clear peer selection without zoom reset
@@ -1670,66 +1664,6 @@ window.ASDiversity = (function () {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // HOVER TOOLTIP
-    // ═══════════════════════════════════════════════════════════
-
-    function showTooltip(asNum, event) {
-        if (!tooltipEl) return;
-        var seg = donutSegments.find(function (s) { return s.asNumber === asNum; });
-        if (!seg) return;
-
-        var html = '';
-
-        // Line 1: AS number + org
-        html += '<div class="as-tt-header">';
-        html += '<span class="as-tt-number">' + seg.asNumber + '</span>';
-        if (seg.asName && !seg.isOthers) {
-            html += '<span class="as-tt-sep">&middot;</span>';
-            var name = seg.asName.length > 28 ? seg.asName.substring(0, 27) + '\u2026' : seg.asName;
-            html += '<span class="as-tt-name">' + name + '</span>';
-        }
-        html += '</div>';
-
-        // Line 2: peer count + type
-        var typeLabel = seg.hostingLabel ? ' \u00b7 ' + seg.hostingLabel : '';
-        html += '<div class="as-tt-stats">' + seg.peerCount + ' peer' + (seg.peerCount !== 1 ? 's' : '') + ' (' + seg.percentage.toFixed(1) + '%)' + typeLabel + '</div>';
-
-        // Line 3: risk (only if notable)
-        if (seg.riskLevel !== 'low' && seg.riskLabel) {
-            html += '<div class="as-tt-risk as-tt-risk-' + seg.riskLevel + '">\u26a0 ' + seg.riskLabel + '</div>';
-        }
-
-        tooltipEl.innerHTML = html;
-        tooltipEl.classList.remove('hidden');
-
-        // Position to the left of the donut, not on cursor (avoids covering it)
-        var pad = 10;
-        var donutRect = donutWrapEl ? donutWrapEl.getBoundingClientRect() : null;
-        // Force layout so we can measure the tooltip
-        tooltipEl.style.left = '-9999px';
-        tooltipEl.style.top = '-9999px';
-        var ttRect = tooltipEl.getBoundingClientRect();
-
-        if (donutRect) {
-            var x = donutRect.left - ttRect.width - pad;
-            if (x < pad) x = pad; // if not enough room on left, just stay near left edge
-            var y = event.clientY - ttRect.height / 2;
-            if (y < pad) y = pad;
-            if (y + ttRect.height > window.innerHeight - pad) y = window.innerHeight - ttRect.height - pad;
-            tooltipEl.style.left = x + 'px';
-            tooltipEl.style.top = y + 'px';
-        } else {
-            // Fallback to cursor
-            tooltipEl.style.left = (event.clientX - ttRect.width - pad) + 'px';
-            tooltipEl.style.top = (event.clientY - ttRect.height / 2) + 'px';
-        }
-    }
-
-    function hideTooltip() {
-        if (tooltipEl) tooltipEl.classList.add('hidden');
-    }
-
-    // ═══════════════════════════════════════════════════════════
     // DETAIL PANEL — Right slide-in (pushes content)
     // ═══════════════════════════════════════════════════════════
 
@@ -2156,10 +2090,6 @@ window.ASDiversity = (function () {
         return '<div class="modal-row"><span class="modal-label">' + label + '</span><span class="modal-val">' + value + '</span></div>';
     }
 
-    function subRow(label, value) {
-        return '<div class="as-detail-sub-row"><span class="as-detail-sub-label">' + label + '</span><span class="as-detail-sub-val">' + value + '</span></div>';
-    }
-
     /** Build an interactive sub-row with hover/click support.
      *  peerIds: array of peer IDs for this row's peers
      *  category: 'conntype' | 'software' | 'services' | 'country' | 'provider' */
@@ -2466,7 +2396,7 @@ window.ASDiversity = (function () {
                     applySubFilter(peerIds, category, label);
                     var html = buildPeerSummaryHtml(peerIds, category, label);
                     showSubTooltip(html, e);
-                    pinSubTooltip(html, rowEl, null);
+                    pinSubTooltip(rowEl);
                 });
             })(rows[ri]);
         }
@@ -2514,43 +2444,16 @@ window.ASDiversity = (function () {
             tip.style.pointerEvents = 'none';
         }
         subTooltipPinned = false;
-        pinnedSubTooltipHtml = null;
         pinnedSubTooltipSrc = null;
-        pinnedSubTooltipSetup = null;
         hideSubSubTooltip();
     }
 
-    /** Pin the sub-tooltip: store HTML and source for hover-preview restore */
-    function pinSubTooltip(html, srcEl, setupFn) {
+    /** Pin the sub-tooltip and remember the element that opened it. */
+    function pinSubTooltip(srcEl) {
         subTooltipPinned = true;
-        pinnedSubTooltipHtml = html;
         pinnedSubTooltipSrc = srcEl || null;
-        pinnedSubTooltipSetup = setupFn || null;
         var tip = document.getElementById('as-sub-tooltip');
         if (tip) tip.style.pointerEvents = 'auto';
-    }
-
-    /** Show a hover preview over a pinned sub-tooltip (temporary replacement) */
-    function showHoverPreview(html, event) {
-        hideSubSubTooltip();
-        var tip = document.getElementById('as-sub-tooltip');
-        if (!tip) return;
-        tip.innerHTML = html;
-        tip.classList.remove('hidden');
-        tip.style.display = '';
-        positionSubTooltip(event);
-        attachSubTooltipHandlers();
-    }
-
-    /** Restore the pinned sub-tooltip after a hover preview ends */
-    function restorePinnedSubTooltip() {
-        if (!subTooltipPinned || !pinnedSubTooltipHtml) return;
-        var tip = document.getElementById('as-sub-tooltip');
-        if (!tip) return;
-        tip.innerHTML = pinnedSubTooltipHtml;
-        tip.style.pointerEvents = 'auto';
-        if (pinnedSubTooltipSetup) pinnedSubTooltipSetup(tip);
-        attachSubTooltipHandlers();
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -2666,36 +2569,6 @@ window.ASDiversity = (function () {
             var peerList = tip.querySelector('.as-sub-tt-scroll');
             if (peerList) peerList.classList.remove('as-sub-tt-expanded');
         });
-    }
-
-    /** Build peer list HTML with rank numbers for the sub-tooltip.
-     *  peerEntries: [{peer, duration}] — sorted by duration desc */
-    function buildRankedPeerListHtml(peerEntries) {
-        var html = '';
-        var initialShow = 6;
-        var hasMore = peerEntries.length > initialShow;
-
-        html += '<div class="as-sub-tt-scroll">';
-        for (var pi = 0; pi < peerEntries.length; pi++) {
-            var ep = peerEntries[pi];
-            var p = ep.peer;
-            var ct = p.connection_type || 'unknown';
-            var ctLabel = CONN_TYPE_LABELS[ct] || ct;
-            var peerAs = parseAsNumber(p.as) || '';
-            var extraClass = pi >= initialShow ? ' as-sub-tt-peer-extra' : '';
-            html += '<div class="as-sub-tt-peer' + extraClass + '" data-peer-id="' + p.id + '" data-as="' + peerAs + '"' + (pi >= initialShow ? ' style="display:none"' : '') + '>';
-            html += '<span class="as-sub-tt-id as-sub-tt-id-link" data-peer-id="' + p.id + '" style="min-width:70px">#' + (pi + 1) + ' ID\u00a0' + p.id + '</span>';
-            html += '<span class="as-sub-tt-type">' + fmtDuration(ep.duration) + '</span>';
-            html += '<span class="as-sub-tt-loc">' + ctLabel + '</span>';
-            html += '</div>';
-        }
-        html += '</div>';
-        if (hasMore) {
-            var remaining = peerEntries.length - initialShow;
-            html += '<div class="as-sub-tt-more as-sub-tt-show-more">+' + remaining + ' more <span class="as-sub-tt-toggle">(show)</span></div>';
-            html += '<div class="as-sub-tt-more as-sub-tt-show-less" style="display:none"><span class="as-sub-tt-toggle">(less)</span></div>';
-        }
-        return html;
     }
 
     /** Build provider list HTML for the sub-tooltip in summary drill-down mode.
@@ -3035,9 +2908,7 @@ window.ASDiversity = (function () {
                     // Pin the sub-tooltip with provider list
                     var html = buildProviderListHtml(providers, catLabel);
                     showSubTooltip(html, e);
-                    pinSubTooltip(html, rowEl, function (tip) {
-                        attachProviderClickHandlers(tip);
-                    });
+                    pinSubTooltip(rowEl);
                     attachProviderClickHandlers(document.getElementById('as-sub-tooltip'));
                 });
             })(rows[ri]);
@@ -3204,10 +3075,7 @@ window.ASDiversity = (function () {
                     var html = buildProvPeerHtml();
                     if (!html) return;
                     showSubTooltip(html, e);
-                    pinSubTooltip(html, rowEl, function (tip) {
-                        attachSubTooltipHandlers();
-                        attachProviderNavHandlers(tip);
-                    });
+                    pinSubTooltip(rowEl);
                     attachSubTooltipHandlers();
                     var tipEl = document.getElementById('as-sub-tooltip');
                     if (tipEl) attachProviderNavHandlers(tipEl);
@@ -3318,7 +3186,7 @@ window.ASDiversity = (function () {
                     var html = buildOutSubHtml();
                     if (!html) return;
                     showSubTooltip(html, e);
-                    pinSubTooltip(html, rowEl, function (tip) { attachSubTooltipHandlers(); });
+                    pinSubTooltip(rowEl);
                     attachSubTooltipHandlers();
                     // Clear insight state
                     if (insightActiveAsNum || insightActiveType) { insightActiveAsNum = null; insightActiveData = null; insightActiveType = null; hideInsightRect(); }
@@ -3405,7 +3273,7 @@ window.ASDiversity = (function () {
                     var html = buildDirPeerHtml();
                     if (!html) return;
                     showSubTooltip(html, e);
-                    pinSubTooltip(html, rowEl, function (tip) { attachSubTooltipHandlers(); });
+                    pinSubTooltip(rowEl);
                     attachSubTooltipHandlers();
                     // Clear insight state
                     if (insightActiveAsNum || insightActiveType) { insightActiveAsNum = null; insightActiveData = null; insightActiveType = null; hideInsightRect(); }
@@ -3512,10 +3380,7 @@ window.ASDiversity = (function () {
                     // Pin the sub-tooltip with provider list + "Open Others panel" nav link
                     var html = buildProviderListHtml(providers, 'Others', 'Others');
                     showSubTooltip(html, e);
-                    pinSubTooltip(html, rowEl, function (tip) {
-                        attachProviderClickHandlers(tip);
-                        attachProviderNavHandlers(tip);
-                    });
+                    pinSubTooltip(rowEl);
                     var tipEl2 = document.getElementById('as-sub-tooltip');
                     attachProviderClickHandlers(tipEl2);
                     attachProviderNavHandlers(tipEl2);
@@ -3586,10 +3451,7 @@ window.ASDiversity = (function () {
                     });
                     var html = buildProviderListHtml(allProvs, 'All Providers (' + allProvs.length + ')');
                     showSubTooltip(html, e);
-                    pinSubTooltip(html, el, function (tip) {
-                        attachProviderClickHandlers(tip);
-                        attachProviderNavHandlers(tip);
-                    });
+                    pinSubTooltip(el);
                     var tip = document.getElementById('as-sub-tooltip');
                     if (tip) {
                         attachProviderClickHandlers(tip);
@@ -3625,10 +3487,7 @@ window.ASDiversity = (function () {
                         });
                         var html = buildProviderListHtml(allProvs, 'All Providers (' + allProvs.length + ')');
                         showSubTooltip(html, e);
-                        pinSubTooltip(html, el, function (tip) {
-                            attachProviderClickHandlers(tip);
-                            attachProviderNavHandlers(tip);
-                        });
+                        pinSubTooltip(el);
                         var tip = document.getElementById('as-sub-tooltip');
                         if (tip) {
                             attachProviderClickHandlers(tip);
@@ -3730,9 +3589,7 @@ window.ASDiversity = (function () {
                 var html = buildFastestProvHtml();
                 if (!html) return;
                 showSubTooltip(html, e);
-                pinSubTooltip(html, fastestLink, function (tip) {
-                    attachFastestProvRowHandlers(tip);
-                });
+                pinSubTooltip(fastestLink);
                 attachFastestProvRowHandlers(document.getElementById('as-sub-tooltip'));
                 // Clear any other active highlights before adding ours
                 var activeBodyEl = panelEl ? panelEl.querySelector('.as-detail-body') : null;
@@ -3860,10 +3717,7 @@ window.ASDiversity = (function () {
                 var result = buildStablePeersHtml();
                 if (!result) return;
                 showSubTooltip(result.html, e);
-                pinSubTooltip(result.html, stableLink, function (tip) {
-                    attachSubTooltipHandlers();
-                    attachProviderNavHandlers(tip);
-                });
+                pinSubTooltip(stableLink);
                 attachSubTooltipHandlers();
                 var tip = document.getElementById('as-sub-tooltip');
                 if (tip) attachProviderNavHandlers(tip);
@@ -4001,9 +3855,7 @@ window.ASDiversity = (function () {
                     var result = buildDataProviderHtml();
                     if (!result) return;
                     showSubTooltip(result.html, e);
-                    pinSubTooltip(result.html, el, function (tip) {
-                        attachDataProviderRowHandlers(tip, field);
-                    });
+                    pinSubTooltip(el);
                     attachDataProviderRowHandlers(document.getElementById('as-sub-tooltip'), field);
                     // Clear any other active highlights before adding ours
                     var activeBodyEl = panelEl ? panelEl.querySelector('.as-detail-body') : null;
@@ -4511,21 +4363,6 @@ window.ASDiversity = (function () {
         renderCenter();
     }
 
-    /** Handle click on title, donut center, or SUMMARY ANALYSIS text */
-    function onSummaryClick(e) {
-        e.stopPropagation();
-        // Close peer detail popup if open — skip zoom reset since summary
-        // will set its own lines/view
-        if (peerDetailActive) {
-            closePeerPopup(true);
-        }
-        if (summarySelected) {
-            deselectSummary();
-        } else {
-            selectSummary();
-        }
-    }
-
     // ═══════════════════════════════════════════════════════════
     // PANEL NAVIGATION — Back button, history, provider links
     // ═══════════════════════════════════════════════════════════
@@ -4643,30 +4480,6 @@ window.ASDiversity = (function () {
         }
     }
 
-    /** Collapse sub-tooltips but keep the main panel open.
-     *  Used when selecting a peer from within sub-panels. */
-    function collapseToMainPanel() {
-        hideSubSubTooltip();
-        hideSubTooltip();
-        subFilterPeerIds = null;
-        subFilterLabel = null;
-        subFilterCategory = null;
-        // Remove active highlights
-        var bodyEl = panelEl ? panelEl.querySelector('.as-detail-body') : null;
-        if (bodyEl) {
-            var rows = bodyEl.querySelectorAll('.sub-filter-active');
-            for (var i = 0; i < rows.length; i++) rows[i].classList.remove('sub-filter-active');
-        }
-        // Restore lines
-        if (summarySelected) {
-            if (_filterPeerTable) _filterPeerTable(null);
-            if (_dimMapPeers) _dimMapPeers(null);
-            activateHoverAll();
-        } else if (selectedAs) {
-            clearSubFilter();
-        }
-    }
-
     /** Handle map click — gradual collapse:
      *  In focused mode:
      *    1st click: close sub-panels, back to panel top level
@@ -4741,7 +4554,6 @@ window.ASDiversity = (function () {
                 // In focused mode, go back to summary instead of closing
                 if (othersListOpen) closeOthersListInDonut();
                 panelHistory = [];
-                var wasAs = selectedAs;
                 selectedAs = null;
                 hoveredAs = null;
                 animateDonutRevert();
@@ -5821,7 +5633,6 @@ window.ASDiversity = (function () {
             else if (p.network === 'onion' || p.network === 'tor') netColor = '#da3633';
             else if (p.network === 'i2p') netColor = '#d29922';
             else if (p.network === 'cjdns') netColor = '#bc8cff';
-            var provName = p.asname || parseAsOrg(p.as) || '';
             html += '<div class="as-detail-sub-row multi-peer-row" data-peer-id="' + p.id + '" style="cursor:pointer; padding:4px 0; border-bottom:1px solid rgba(88,166,255,0.06)">';
             html += '<span class="as-detail-sub-label" style="min-width:40px; color:' + netColor + '">#' + p.id + '</span>';
             html += '<span class="as-detail-sub-val" style="flex:1">' + escHtml(p.addr || '') + '</span>';
@@ -6272,7 +6083,6 @@ window.ASDiversity = (function () {
         donutSvg = document.getElementById('as-donut');
         donutCenter = document.getElementById('as-donut-center');
         legendEl = document.getElementById('as-legend');
-        tooltipEl = document.getElementById('as-tooltip');
         panelEl = document.getElementById('as-detail-panel');
         loadingEl = containerEl ? containerEl.querySelector('.as-loading') : null;
         focusedCloseBtn = document.getElementById('as-focused-close');
@@ -6347,8 +6157,6 @@ window.ASDiversity = (function () {
             }
         });
 
-        // Always active — show immediately
-        isActive = true;
     }
 
     /** Register integration callbacks from app.js */
@@ -6358,8 +6166,6 @@ window.ASDiversity = (function () {
         _clearAsLines = hooks.clearAsLines || null;
         _filterPeerTable = hooks.filterPeerTable || null;
         _dimMapPeers = hooks.dimMapPeers || null;
-        _getWorldToScreen = hooks.getWorldToScreen || null;
-        _selectPeerById = hooks.selectPeerById || null;
         _zoomToPeerOnly = hooks.zoomToPeerOnly || null;
         _resetMapZoom = hooks.resetMapZoom || null;
         _clearPeerSelection = hooks.clearPeerSelection || null;
@@ -6369,7 +6175,6 @@ window.ASDiversity = (function () {
 
     /** Update with new peer data. Called after each fetchPeers(). */
     function update(peers) {
-        if (!isActive) return;
         lastPeersRaw = peers;
 
         // Check if >10% of peers are still being geolocated
@@ -6951,23 +6756,6 @@ window.ASDiversity = (function () {
         }
     }
 
-    /** Activate the AS Diversity view (always active now, kept for API compat) */
-    function activate() {
-        isActive = true;
-    }
-
-    /** Deactivate the AS Diversity view */
-    function deactivate() {
-        isActive = false;
-        deselect();
-        hideTooltip();
-    }
-
-    /** Returns true if this view is currently active */
-    function isViewActive() {
-        return isActive;
-    }
-
     /** Get the donut center screen position for line drawing */
     function getDonutCenter() {
         if (!donutWrapEl) return null;
@@ -7054,26 +6842,10 @@ window.ASDiversity = (function () {
         return selectedAs;
     }
 
-    /** Get the currently hovered AS number */
-    function getHoveredAs() {
-        return hoveredAs;
-    }
-
-    /** Get peer IDs for a given AS number */
-    function getPeerIdsForAs(asNum) {
-        var seg = donutSegments.find(function (s) { return s.asNumber === asNum; });
-        return seg ? seg.peerIds : [];
-    }
-
     /** Get the color for a given AS number */
     function getColorForAs(asNum) {
         var seg = donutSegments.find(function (s) { return s.asNumber === asNum; });
         return seg ? seg.color : null;
-    }
-
-    /** Get all segments (for canvas integration) */
-    function getSegments() {
-        return donutSegments;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -7282,50 +7054,27 @@ window.ASDiversity = (function () {
         document.body.classList.remove('panel-focus-peers');
     }
 
-    /** Close network panel and return to default state */
-    function closeNetworkPanel() {
-        activeNetworkPanel = null;
-        navigateBack();
-    }
-
     return {
         init: init,
         setHooks: setHooks,
         update: update,
-        activate: activate,
-        deactivate: deactivate,
         deselect: deselect,
-        clearSubFilter: clearSubFilter,
-        hasSubFilter: function () { return subFilterPeerIds !== null; },
-        hasSubTooltip: function () { return subTooltipPinned || subSubTooltipPinned; },
         onMapClick: onMapClick,
-        isViewActive: isViewActive,
-        getDonutCenter: getDonutCenter,
-        getLegendDotPosition: getLegendDotPosition,
         getLineOriginForAs: getLineOriginForAs,
-        getHoveredAs: getHoveredAs,
-        getHoveredAll: function () { return hoveredAll || summarySelected; },
         getSelectedAs: getSelectedAs,
-        getSummarySelected: function () { return summarySelected; },
-        getPeerIdsForAs: getPeerIdsForAs,
         getColorForAs: getColorForAs,
-        getSegments: getSegments,
-        collapseToMainPanel: collapseToMainPanel,
         // Focused mode
         enterFocusedMode: enterFocusedMode,
         exitFocusedMode: exitFocusedMode,
         isFocusedMode: isFocusedMode,
         // Peer detail popup (from peer list or map dot)
         openPeerDetailPanel: openPeerDetailPanel,
-        openMultiPeerPopup: openMultiPeerPopup,
         closePeerPopup: closePeerPopup,
         isPeerDetailActive: function () { return peerDetailActive; },
         getLastPeersRaw: function () { return lastPeersRaw; },
         // Network panels (IPv4/IPv6)
         openNetworkPanel: openNetworkPanel,
-        getActiveNetworkPanel: function () { return activeNetworkPanel; },
         // Legend visibility
         setLegendsHidden: setLegendsHidden,
-        isLegendsHidden: function () { return legendsHidden; },
     };
 })();

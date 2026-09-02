@@ -11,12 +11,18 @@ class FakeRuntime:
     def __init__(self):
         self.started = False
         self.stopped = False
+        self.metrics = FakeMetrics()
 
     def start(self) -> None:
         self.started = True
 
     def stop(self) -> None:
         self.stopped = True
+
+
+class FakeMetrics:
+    def summary(self) -> dict[str, float]:
+        return {"cpu_pct": 12.5}
 
 
 def settings(tmp_path: Path) -> AppSettings:
@@ -37,7 +43,10 @@ def test_application_factory_serves_health_dashboard_and_assets(tmp_path: Path) 
     with TestClient(app) as client:
         assert runtime.started is True
         assert client.get("/healthz").json() == {"status": "ok"}
+        assert client.get("/api/stats").json() == {"system_stats": {"cpu_pct": 12.5}}
         assert "Bitcoin Peer Map" in client.get("/").text
         assert client.get("/static/js/app.js").status_code == 200
+        assert client.get("/api/changes").status_code == 404
+        assert client.get("/api/netspeed").status_code == 404
 
     assert runtime.stopped is True

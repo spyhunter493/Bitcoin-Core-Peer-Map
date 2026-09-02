@@ -5,7 +5,6 @@ from __future__ import annotations
 import queue
 import threading
 import time
-from datetime import datetime
 from typing import Any
 
 import requests
@@ -22,7 +21,6 @@ from ..network import (
 from ..rpc import BitcoinRpcClient, RpcError
 from .connectivity import ConnectivityService
 from .geoip import GeoDatabase, is_valid_geo_data
-from .system_metrics import SystemMetrics
 
 GEO_API_URL = "http://ip-api.com/json"
 GEO_API_FIELDS = (
@@ -31,7 +29,6 @@ GEO_API_FIELDS = (
     "proxy,hosting"
 )
 REFRESH_INTERVAL_SECONDS = 10
-RECENT_CHANGE_SECONDS = 20
 GEO_API_DELAY_SECONDS = 1.5
 
 
@@ -41,33 +38,23 @@ class PeerService:
         rpc: BitcoinRpcClient,
         geo_database: GeoDatabase,
         connectivity: ConnectivityService,
-        metrics: SystemMetrics,
         stop_event: threading.Event,
     ):
         self.rpc = rpc
         self.geo_database = geo_database
         self.connectivity = connectivity
-        self.metrics = metrics
         self.stop_event = stop_event
 
         self._peers: list[dict[str, Any]] = []
         self._peers_lock = threading.Lock()
-        self._changes: list[tuple[float, str, dict[str, Any]]] = []
-        self._changes_lock = threading.Lock()
         self._geo_queue: queue.Queue[tuple[str, str]] = queue.Queue()
         self._pending: set[str] = set()
         self._pending_lock = threading.Lock()
         self._geo_cache: dict[str, dict[str, Any]] = {}
         self._geo_cache_lock = threading.Lock()
-        self._peer_addresses: dict[str, dict[str, str]] = {}
-        self._peer_addresses_lock = threading.Lock()
         self._known_addresses: set[str] = set()
         self._known_addresses_lock = threading.Lock()
-        self.update_event = threading.Event()
-        self.last_update_type = "connected"
         self._threads: list[threading.Thread] = []
-
-        self.connectivity.set_change_callback(self.broadcast)
 
     def start(self) -> None:
         self.refresh_known_addresses()
@@ -79,14 +66,8 @@ class PeerService:
             thread.start()
 
     def stop(self) -> None:
-        self.stop_event.set()
-        self.update_event.set()
         for thread in self._threads:
             thread.join(timeout=2)
-
-    def broadcast(self, event_type: str, _data: dict[str, Any] | None = None) -> None:
-        self.last_update_type = event_type
-        self.update_event.set()
 
     def raw_peers(self) -> list[dict[str, Any]]:
         try:
@@ -94,18 +75,6 @@ class PeerService:
             return peers if isinstance(peers, list) else []
         except RpcError:
             return []
-
-    def enabled_networks(self) -> list[str]:
-        try:
-            network_info = self.rpc.call("getnetworkinfo")
-        except RpcError:
-            return ["ipv4"]
-        enabled = [
-            item.get("name", "")
-            for item in network_info.get("networks", [])
-            if item.get("reachable")
-        ]
-        return enabled or ["ipv4"]
 
     def refresh_known_addresses(self) -> None:
         try:
@@ -121,7 +90,6 @@ class PeerService:
             return host in self._known_addresses
 
     def _refresh_loop(self) -> None:
-        previous_ids: set[str] = set()
         address_refreshes = 0
         while not self.stop_event.is_set():
             peers = self.raw_peers()
@@ -133,29 +101,10 @@ class PeerService:
                 self.refresh_known_addresses()
                 address_refreshes = 0
 
-            current_ids: set[str] = set()
-            now = time.time()
             for peer in peers:
-                peer_id = str(peer.get("id", ""))
-                current_ids.add(peer_id)
                 address = peer.get("addr", "")
                 peer_network = peer.get("network", network_type(address))
-                host, port = split_peer_address(address)
-                with self._peer_addresses_lock:
-                    self._peer_addresses[peer_id] = {
-                        "ip": host,
-                        "port": port,
-                        "network": peer_network,
-                    }
-                if peer_id not in previous_ids and previous_ids:
-                    with self._changes_lock:
-                        self._changes.append(
-                            (
-                                now,
-                                "connected",
-                                {"ip": host, "port": port, "network": peer_network},
-                            )
-                        )
+                host, _ = split_peer_address(address)
 
                 if self.cached_geo(host) is None:
                     if is_public_address(peer_network, host):
@@ -163,28 +112,6 @@ class PeerService:
                     else:
                         self._cache_private_address(host)
 
-            for peer_id in previous_ids - current_ids:
-                with self._peer_addresses_lock:
-                    peer = self._peer_addresses.pop(peer_id, {})
-                with self._changes_lock:
-                    self._changes.append(
-                        (
-                            now,
-                            "disconnected",
-                            {
-                                "ip": peer.get("ip", f"peer#{peer_id}"),
-                                "port": peer.get("port", ""),
-                                "network": peer.get("network", "?"),
-                            },
-                        )
-                    )
-
-            with self._changes_lock:
-                self._changes = [
-                    change for change in self._changes if now - change[0] < RECENT_CHANGE_SECONDS
-                ]
-            previous_ids = current_ids
-            self.broadcast("peers_update")
             self.stop_event.wait(REFRESH_INTERVAL_SECONDS)
 
     def cached_geo(self, host: str) -> dict[str, Any] | None:
@@ -293,7 +220,6 @@ class PeerService:
                 )
             with self._pending_lock:
                 self._pending.discard(host)
-            self.broadcast("geo_update")
             if not from_database and not skip_api:
                 self.stop_event.wait(GEO_API_DELAY_SECONDS)
 
@@ -402,34 +328,3 @@ class PeerService:
                 }
             )
         return result
-
-    def recent_changes(self) -> list[dict[str, Any]]:
-        with self._changes_lock:
-            changes = list(self._changes)
-        return [
-            {"time": timestamp, "type": change_type, "peer": peer}
-            for timestamp, change_type, peer in changes
-        ]
-
-    def stats(self) -> dict[str, Any]:
-        peers = self.raw_peers()
-        network_counts = {
-            name: {"in": 0, "out": 0} for name in ("ipv4", "ipv6", "onion", "i2p", "cjdns")
-        }
-        for peer in peers:
-            peer_network = peer.get("network", "ipv4")
-            if peer_network in network_counts:
-                direction = "in" if peer.get("inbound") else "out"
-                network_counts[peer_network][direction] += 1
-        with self._pending_lock:
-            pending = len(self._pending)
-        return {
-            "connected": len(peers),
-            "networks": network_counts,
-            "enabled_networks": self.enabled_networks(),
-            "geo_pending": pending,
-            "last_update": datetime.now().strftime("%H:%M:%S"),
-            "refresh_interval": REFRESH_INTERVAL_SECONDS,
-            "system_stats": self.metrics.summary(),
-            "geo_entry_count": self.geo_database.stats().get("entries", 0),
-        }

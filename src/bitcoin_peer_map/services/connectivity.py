@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Callable
 from typing import Any
 
 import requests
@@ -16,7 +15,6 @@ class ConnectivityService:
         self._lock = threading.RLock()
         self._checker_lock = threading.Lock()
         self._checker: threading.Thread | None = None
-        self._on_change: Callable[[str, dict[str, Any]], None] | None = None
         self.internet_state = "green"
         self.consecutive_successes = 0
         self.failure_started_at: float | None = None
@@ -28,9 +26,6 @@ class ConnectivityService:
         self.last_price_currency = "USD"
         self.last_price_error: str | None = None
 
-    def set_change_callback(self, callback: Callable[[str, dict[str, Any]], None]) -> None:
-        self._on_change = callback
-
     def _set_state(self, state: str) -> None:
         with self._lock:
             if self.internet_state == state:
@@ -38,14 +33,6 @@ class ConnectivityService:
             previous = self.internet_state
             self.internet_state = state
         print(f"Internet state changed from {previous} to {state}")
-        if self._on_change:
-            self._on_change(
-                "connectivity",
-                {
-                    "internet_state": state,
-                    "api_available": self.api_consecutive_failures < 5,
-                },
-            )
 
     def network_failure(self, *, geoip_api: bool = False) -> None:
         with self._lock:
@@ -82,6 +69,10 @@ class ConnectivityService:
                 name="connectivity-monitor",
             )
             self._checker.start()
+
+    def stop(self) -> None:
+        if self._checker:
+            self._checker.join(timeout=2)
 
     def _check_loop(self) -> None:
         while not self._stop_event.is_set():

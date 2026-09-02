@@ -109,18 +109,6 @@ class GeoDatabase:
             )
             connection.execute("PRAGMA journal_mode=WAL")
 
-    def integrity(self) -> tuple[bool, str]:
-        if not self.path.exists():
-            return True, "Database does not exist yet"
-        try:
-            with sqlite3.connect(self.path) as connection:
-                result = connection.execute("PRAGMA integrity_check").fetchone()
-        except sqlite3.Error as exc:
-            return False, f"Error checking database: {exc}"
-        if result and result[0] == "ok":
-            return True, "Database integrity OK"
-        return False, f"Integrity check failed: {result[0] if result else 'no result'}"
-
     def stats(self) -> dict[str, Any]:
         result: dict[str, Any] = {
             "status": "disabled",

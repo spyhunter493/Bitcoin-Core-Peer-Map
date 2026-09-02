@@ -21,12 +21,7 @@ def health():
 
 @router.get("/api/stats")
 def stats(runtime: AppRuntime = Depends(runtime_from)):
-    return runtime.peers.stats()
-
-
-@router.get("/api/netspeed")
-def network_speed(runtime: AppRuntime = Depends(runtime_from)):
-    return runtime.metrics.network_speed()
+    return {"system_stats": runtime.metrics.summary()}
 
 
 @router.get("/api/stream/system")

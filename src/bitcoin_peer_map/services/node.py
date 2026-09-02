@@ -27,9 +27,10 @@ class NodeService:
 
     def dashboard_info(self, currency: str = "USD") -> dict[str, Any]:
         currency = currency.upper()
+        price = self.connectivity.fetch_price(currency)
         connectivity = self.connectivity.snapshot()
         result: dict[str, Any] = {
-            "btc_price": self.connectivity.fetch_price(currency),
+            "btc_price": price,
             "btc_currency": currency,
             "last_block": None,
             "blockchain": None,
@@ -104,7 +105,7 @@ class NodeService:
         geo_stats.update(
             auto_lookup=self.geo_database.enabled,
             auto_update=self.auto_update_enabled(),
-            db_only_mode=self.connectivity.snapshot()["geo_db_only_mode"],
+            db_only_mode=connectivity["geo_db_only_mode"],
         )
         result["geo_db_stats"] = geo_stats
         return result

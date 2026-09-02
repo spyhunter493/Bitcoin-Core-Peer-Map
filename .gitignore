@@ -8,11 +8,6 @@ env/
 venv/
 .venv/
 
-# Data directory contents (keep structure)
-data/*.db
-data/*.conf
-data/*.log
-
 # IDE
 .idea/
 .vscode/

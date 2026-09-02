@@ -32,7 +32,6 @@ class AppRuntime:
             self.rpc,
             self.geo_database,
             self.connectivity,
-            self.metrics,
             self.stop_event,
         )
         self.node = NodeService(
@@ -59,7 +58,12 @@ class AppRuntime:
             self._geoip_update_thread.start()
 
     def stop(self) -> None:
+        self.stop_event.set()
         self.peers.stop()
+        self.metrics.stop()
+        self.connectivity.stop()
+        if self._geoip_update_thread:
+            self._geoip_update_thread.join(timeout=2)
 
     def toggle_geoip_auto_update(self) -> bool:
         self.preferences.geoip_auto_update = not self.preferences.geoip_auto_update
