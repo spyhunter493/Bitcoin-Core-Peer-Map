@@ -1022,6 +1022,7 @@
                 const isCollapsed = panel.classList.contains('collapsed');
                 minimizeBtn.innerHTML = isCollapsed ? '&#9650;' : '&#9660;';
                 minimizeBtn.title = isCollapsed ? 'Show peer list table' : 'Hide peer list table';
+                scheduleDonutStackFit();
             }
         });
     }
@@ -2829,6 +2830,47 @@
         renderPeerTable();
     }
 
+    function fitDonutStackToViewport() {
+        const container = document.getElementById('as-diversity-container');
+        if (!container) return;
+
+        if (privateNetMode || document.body.classList.contains('donut-focused')) {
+            container.style.setProperty('--as-donut-fit-scale', '1');
+            return;
+        }
+
+        const panel = document.getElementById('peer-panel');
+        if (!panel || panel.classList.contains('collapsed')) {
+            container.style.setProperty('--as-donut-fit-scale', '1');
+            return;
+        }
+
+        const panelRect = panel.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        const unscaledHeight = container.offsetHeight || containerRect.height;
+        const top = parseFloat(getComputedStyle(container).top) || containerRect.top;
+        const availableHeight = panelRect.top - top - 12;
+
+        const minScale = 0.5;
+
+        if (unscaledHeight <= 0 || availableHeight <= 0) {
+            container.style.setProperty('--as-donut-fit-scale', String(minScale));
+            return;
+        }
+
+        const nextScale = Math.max(minScale, Math.min(1, availableHeight / unscaledHeight));
+        container.style.setProperty('--as-donut-fit-scale', nextScale.toFixed(3));
+    }
+
+    function scheduleDonutStackFit() {
+        requestAnimationFrame(() => {
+            fitDonutStackToViewport();
+            requestAnimationFrame(fitDonutStackToViewport);
+        });
+        setTimeout(fitDonutStackToViewport, 480);
+    }
+
+
     /** Render the mini private donut below the public AS donut (when private peers exist) */
     function renderPnMiniDonut() {
         const miniWrap = document.getElementById('pn-mini-donut');
@@ -2843,12 +2885,16 @@
         if (total === 0 || privateNetMode) {
             miniWrap.classList.remove('visible');
             if (!miniWrap.classList.contains('hidden')) miniWrap.classList.add('hidden');
+            scheduleDonutStackFit();
             return;
         }
 
         // Show mini donut
         miniWrap.classList.remove('hidden');
-        requestAnimationFrame(() => miniWrap.classList.add('visible'));
+        requestAnimationFrame(() => {
+            miniWrap.classList.add('visible');
+            scheduleDonutStackFit();
+        });
 
         // Build mini segments
         const counts = { onion: 0, i2p: 0, cjdns: 0 };
@@ -3002,6 +3048,7 @@
                 });
             });
         }
+        scheduleDonutStackFit();
     }
 
     /** Draw "PRIVATE NETWORKS" text tiled across Antarctica on the canvas */
@@ -4454,6 +4501,7 @@
         basemapCanvas.style.transform = 'none';
         lastBasemapTransform = 'none';
         markBasemapDirty();
+        fitDonutStackToViewport();
     }
 
     function setMapInteraction(active) {
@@ -5897,6 +5945,7 @@
             document.body.classList.add('panel-focus-peers');
             document.body.classList.remove('panel-focus-as');
         }
+        scheduleDonutStackFit();
     });
 
     // [AS-DIVERSITY] Clicking anywhere in peer panel body → bring peers to front
@@ -7709,6 +7758,7 @@
         } else {
             panel.style.maxHeight = '';
         }
+        scheduleDonutStackFit();
     }
 
     function closeDisplaySettingsOnOutside(e) {
