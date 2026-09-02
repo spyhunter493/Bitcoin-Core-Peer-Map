@@ -1,829 +1,220 @@
-# MBCore Dashboard: Geolocated Peer Map and Network Provider Analysis for your Personal Bitcoin Core Node
+# Bitcoin Peer Map
 
-### A real-time monitoring dashboard for your personal Bitcoin Core node. Geolocates connected peers on an interactive world map, analyzes service provider diversity across your connections, and provides tools to manage peers directly from a browser-based GUI.
+Bitcoin Peer Map is a Docker-first dashboard for monitoring and managing peers connected to a Bitcoin Core or Bitcoin Knots node. It provides a real-time world map, peer and network statistics, mempool and blockchain information, GeoIP enrichment, connection controls, and ban management.
 
-![MBCore Dashboard](docs/images/firsthero.png)
+![Bitcoin Peer Map dashboard](docs/images/hero1.png)
 
-![MBCore Dashboard](docs/images/hero1.png)
+## Requirements
 
-![MBCore Dashboard](docs/images/hero2.png)
+- Docker Engine with Docker Compose
+- A reachable Bitcoin Core or Bitcoin Knots JSON-RPC endpoint
+- Dedicated RPC credentials for the dashboard
 
-![MBCore Dashboard](docs/images/hero3.png)
-
-*Click any provider on the donut chart to draw animated connection lines to every peer on the map hosted by that provider, with a full breakdown in the slide-in detail panel. Click the center of the donut to open the Peer ISP Diversity Summary, where every category drills down to individual peers.*
-
----
-
-## What Makes This Different
-
-MBCore Dashboard doesn't just show you dots on a map. It gives you the ability to explore, analyze, and understand your node's entire peer network through a deeply interconnected drill-down system. Nearly everything you see is clickable, and nearly every click takes you deeper:
-
-- **Start anywhere:** click a provider on the donut chart, a country in the summary panel, a service flag, a software version, a hosting type, or a network protocol
-- **Drill to providers:** see which ISPs and hosting companies serve peers in that category, ranked by peer count
-- **Drill to peers:** expand any provider to see its individual peers with connection type, location, and stats
-- **Drill to the map:** click any peer to zoom to its exact location on the map, draw a connection line, and open its full detail popup with 30+ fields of information
-- **Everything survives refresh:** your drill-down state, selected peer, panel position, and scroll location all persist through automatic data updates so you never lose your place
-
-This means you can answer questions like "Which of my peers running Satoshi 28.1.0 are on residential connections in Germany?" or "Which provider gives me the fastest ping and how long have those peers been connected?", entirely through point-and-click navigation, no command line required.
-
----
-
-## Key Features
-
-- **Interactive HTML5 Canvas world map** with every connected peer geolocated and color-coded by network type
-- **Service provider (ISP/AS) diversity analysis:** animated donut chart with diversity score, concentration risk assessment, and deep per-provider breakdowns
-- **Peer ISP Diversity Summary:** a dedicated analysis panel with Score & Insights, Connections by Provider, Most Stable, Fastest Connection, Most Data Sent/Received rankings, plus full filtering by Network, Hosting Type, Country, Software, and Services
-- **Three-level drill-down system:** from category → provider → individual peer on the map, across every dimension
-- **Full peer detail popups** with 30+ fields: ID, address, port, network, direction, connection type, software, protocol version, services, location, ISP, AS, ping, min ping, connection duration, bytes sent/received, addrman status, addr relay, hosting type, BIP152 high-bandwidth status, and more
-- **Supports all 5 Bitcoin Core network types**: IPv4, IPv6, Tor, I2P, CJDNS
-- **Real-time system stats:** CPU, RAM, network throughput, peer counts, with live animated bars
-- **Live Bitcoin price** with configurable currency and color-coded price movement
-- **Peer management:** connect, disconnect, and ban peers directly from the dashboard
-- **33-column sortable, filterable peer table** (16 default + 17 advanced) with click-to-fly-to-map on every row
-- **Local GeoIP database** with automatic updates from the [Bitcoin Node GeoIP Dataset](https://github.com/mbhillrn/Bitcoin-Node-GeoIP-Dataset), works offline for cached peers
-- **4 built-in themes** (Dark, Light, OLED, Midnight) with fully customizable map appearance: land, ocean, borders, grid, peer effects, and more
-- **Zero config:** auto-detects your Bitcoin Core installation
-- **Single script install:** no accounts, no API keys, no external services requiring signup
-
-**Requires:** [Bitcoin Core](https://bitcoincore.org/) (`bitcoind`) installed and running.
-
----
+The Bitcoin node can run on another machine, in another Compose project, or elsewhere on the network. Bitcoin Peer Map does not need the node datadir, blockchain files, `bitcoin-cli`, Python, or a virtualenv on the Docker host.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/mbhillrn/Bitcoin-Core-Peer-Map.git
-cd Bitcoin-Core-Peer-Map
-./da.sh
+git clone https://github.com/spyhunter493/bitcoin-peer-map.git
+cd bitcoin-peer-map
+cp .env.example .env
 ```
 
-On first run, the script checks prerequisites and sets up a Python virtual environment:
-
-![Prerequisites and Setup](docs/images/2.prereqs.png)
-
-Bitcoin Core is auto-detected and configured. The GeoIP database is automatically enabled and downloaded. If auto-detection can't find your setup (rare), use **m) Manual Settings** from the main menu to enter your paths.
-
-You'll land at the main menu. Press **1** to launch the dashboard:
-
-![Main Menu](docs/images/5.menu.png)
-
-If the geolocation service is unreachable (no internet), you'll see a warning before the dashboard launches. Your local GeoIP database is used automatically for cached peers. Press **Enter** to continue or **R** to retry:
-
-![Cannot Reach Geolocation Service](docs/images/6.cannot-reach-geo.png)
-
-The dashboard starts and shows access URLs tailored to your detected environment:
-
-**Local (desktop):** Shows your localhost URL with a LAN address for other devices on your network.
-
-![Local Instructions](docs/images/6.local-instructions.png)
-
-**Remote (SSH/headless):** Shows your LAN IP as the primary URL, with firewall guidance if one is detected.
-
-![Remote Instructions](docs/images/6.remote-instructions.png)
-
-Open the URL in your browser and you're in.
-
----
-
-## Dashboard Overview
-
-### Top Bar
-
-![Top Bar](docs/images/topbar.png)
-
-The top bar provides all primary information, navigation, and tools at a glance.
-
-**Left side:** The MBCore Dashboard logo and version number (click to visit the GitHub repo). Below that, system stats: **Peers** total count, **CPU** utilization, **RAM** usage, and **NET ↓/↑** real-time network throughput with animated bars. Click any stat for a detailed system info modal. The live Bitcoin price is displayed with configurable currency and update frequency. Price turns **green** on increases and **red** on decreases. Map zoom controls (+/−) and a gear icon for Map Settings are below the price.
-
-**Center (top row):** All five Bitcoin Core network types as individual chips: **IPv4**, **IPv6**, **Tor**, **I2P**, and **CJDNS**. Each chip displays a colored status dot, the protocol name, and live inbound/outbound peer counts.
-
-- **Green dot:** the network is enabled and has active peers
-- **Red/gray dot:** the network is disabled or has no connected peers
-
-Each chip shows real-time counts like `3↓ 5↑`. When a peer connects or disconnects, an animated delta indicator briefly appears next to the affected count.
-
-**Clicking a network chip** opens that network's dedicated detail panel inside the appropriate mode. Public network chips (IPv4, IPv6) open a network breakdown panel within the public donut view. Private network chips (Tor, I2P, CJDNS) automatically enter Private Network Mode first, then navigate directly to that network's panel. This means you can jump straight to any network's full analysis from the top bar with a single click.
-
-![Top Bar Network Chips to IPv6 Panel](docs/images/topnetworkbartoipv6panel.png)
-
-*Clicking the IPv6 chip on the top bar opens a dedicated IPv6 network panel with full stats, provider drill-down, hosting breakdown, country distribution, software versions, and service flags. Every row drills down to individual peers. Click blank map space or press Escape to return to the summary.*
-
-**Right (top row):** Update countdown, map load status, sync indicator, and current time.
-
-**Right side:** The Service Provider Diversity donut chart. Click the center of the donut to enter the **Peer ISP Diversity Summary:** the main analysis and exploration panel.
-
----
-
-### Service Provider Diversity: Donut Chart
-
-The **Service Provider Diversity** donut chart visualizes how your node's public peers are distributed across internet service providers, hosting companies, and other network operators (identified by their Autonomous System number). This is your entry point into the entire provider analysis system.
-
-**Donut Chart:**
-- Displays the **top 8 service providers** by peer count, each as a color-coded segment
-- Providers outside the top 8 are grouped into an **"Others"** category
-- Hovering any segment or legend item shows a tooltip with provider name, peer count, percentage, and concentration risk level
-- **Clicking a segment** selects that provider: draws animated connection lines from the chart to every peer on the map hosted by that provider, filters the peer table, and opens the provider's detail panel
-
-**Diversity Score (0-10):**
-- Displayed in the center of the donut with the number of public peers analyzed
-- Based on the Herfindahl-Hirschman Index (HHI), which accounts for both the number of unique providers and how evenly peers are spread among them
-- Color-coded quality rating: **Excellent** (8+), **Good** (6-8), **Moderate** (4-6), **Poor** (2-4), **Critical** (0-2)
-
-**Legend:**
-- Appears when hovering over the donut area
-- Shows each provider's color, abbreviated name, peer count, and percentage
-- Stays visible while a provider is selected
-- Connection lines originate from the legend dots to peers on the map
-
----
-
-### Provider Detail Panel
-
-![Provider Detail Panel](docs/images/providerpanel.png)
-
-Clicking any provider segment on the donut chart (or any provider name anywhere in the summary panel) opens a **slide-in detail panel** on the right side of the screen with comprehensive information for that provider:
-
-- **Peers:** Total, Inbound, Outbound, and connection type breakdown (Full Relay, Block Relay Only, Manual, etc.). Click any count to see the specific peers in a sub-menu, then click any peer to locate it on the map.
-- **Performance:** Average connection duration, average ping latency, total data sent, total data received
-- **Software:** Every version of Bitcoin Core running through that provider's peers (e.g., `/Satoshi:28.1.0/`, `/Satoshi:30.0.0/`). Click any version to see which peers are running it, then click any peer to see it on the map.
-- **Countries:** Geographic distribution of peers within that provider. Click any country to see peers in that country, then click through to any individual peer.
-- **Services:** Service flag combinations advertised by that provider's peers (e.g., `N W P`, `NL W P`). Click any combination to see peers advertising those flags, then drill to the map.
-
-**Every section supports the full drill-down**: category → peer list → individual peer on the map with connection line and full detail popup.
-
----
-
-### Connections by Provider
-
-![Connections by Provider: Top 8](docs/images/connectionsbyprovider.png)
-
-Inside the **Peer ISP Diversity Summary** panel, the **Connections by Provider** section lists every provider with their Total, Inbound, and Outbound peer counts. Select any of the top 8 providers to see a list of all peers connected through that provider, and click through each peer to see it on the map with all of its information.
-
-If a provider is not in the top 8, click the **Others** slice on the donut chart to see a complete list of all other providers with peers. Each provider in the Others list has sub-menus with their peers that you can click to see their location, stats, and full detail on the map.
-
----
-
-### Others: Providers Outside the Top 8
-
-![Click the Others slice to find SpaceX Starlink](docs/images/spacex1.png)
-
-Click the **Others** slice on the donut chart to see all providers outside the top 8. A scrollable list appears next to the donut with every other provider that has connected peers. Here, **SPACEX-STARLINK** (AS14593) is visible in the list.
-
-![SpaceX Starlink provider panel with connection lines](docs/images/spacex2.png)
-
-Clicking **SpaceX Starlink** opens the Space Exploration Technologies provider panel on the right side, drawing animated connection lines from the donut to every SpaceX peer on the map. The panel shows the full breakdown: peers, performance, software, countries, and services.
-
-![SpaceX Starlink peers filtered to United States](docs/images/spacex3.png)
-
-From the provider panel, select **United States** under Countries to filter to just the SpaceX peers in the US. The donut updates to show SpaceX Starlink, connection lines narrow to US peers only, and the country sub-menu lists each individual peer. Click any peer to open its full information card and see its exact location on the map.
-
-To return to the Others provider list, click the **← Others** back arrow in the center of the donut.
-
----
-
-### Peer ISP Diversity Summary
-
-Click the **center of the donut chart** to open the **Peer ISP Diversity Summary:** a comprehensive analysis panel that gives you a high-level overview of your entire peer network, with every row drillable to the individual peer level.
-
-#### Score & Insights
-
-The top of the summary shows your network health at a glance:
-
-- **Diversity Score:** your 0-10 score based on how evenly distributed your peers are across providers
-- **Quality:** text rating (Excellent, Good, Moderate, Poor, Critical)
-- **Unique Providers:** how many distinct ISPs/hosting companies your peers connect through (clickable to view all)
-- **Top Provider:** the provider with the most peers (clickable to open its panel)
-
-Below the score are four dynamic insight categories, each with deep drill-down:
-
-#### Most Stable Connection (by rank)
-
-![Most Stable Connection](docs/images/moststable.png)
-
-Click **Most Stable** to see providers ranked by average connection duration. The provider with the longest-running connections appears first. Each provider can be expanded to reveal its individual peers, sorted by uptime, and you can click any peer to see it on the map with its full connection details, including exactly how long it has been connected to your node.
-
-#### Fastest Connection (by rank)
-
-![Fastest Connection](docs/images/fastestconnection.png)
-
-Click **Fastest Connection** to see providers ranked by average ping latency (lowest first). Scroll through each provider, conveniently ranked by connection speed, to see their peers, latency stats, and locations on the map. Click any peer for full details.
-
-#### Most Data Sent To (by rank)
-
-![Most Data Sent To](docs/images/mostdatasent.png)
-
-Click **Most Data Sent To** to see providers ranked by how much data your node has sent to their peers. Expand any provider to see individual peers ranked by bytes sent, with their information and location. Click through to the map for full detail.
-
-#### Most Data Recv By (by rank)
-
-![Most Data Recv By](docs/images/mostdatarecv.png)
-
-Click **Most Data Recv By** to see providers ranked by how much data you have received from them. Expand any provider to see peers ranked by bytes received, with all stats and locations. Click through to the map for full detail.
-
----
-
-### Filtering by Network, Hosting, Country, Software, and Services
-
-![Network, Hosting, Countries, and Software filters](docs/images/nethostcountriessoft.png)
-
-Below the insight rankings, the summary panel provides five additional filter sections that let you slice your entire peer network by any dimension:
-
-- **Networks:** Filter peers by connected network protocol: IPv4, IPv6, Tor, I2P, or CJDNS. Each entry shows peer count and provider count. Click any network to see which providers have peers on that network, then drill to individual peers.
-
-- **Hosting:** Filter by hosting type: **Residential** (home ISP connections), **Cloud / Hosting** (datacenter and server providers), **Mobile** (cellular networks), or **Proxy / VPN** (anonymizing relays). Click any type to see providers and peers in that category.
-
-- **Countries:** Filter by country. Every country your peers are in is listed with peer count and provider count. Click any country to see which providers operate there, then drill to the specific peers in that country and locate them on the map.
-
-- **Software:** Filter by Bitcoin Core version string (e.g., `/Satoshi:30.0.0/`, `/Satoshi:28.1.0/`). See how many peers and providers are running each version. Click any version to see providers, then peers, then locate them on the map.
-
-- **Services:** Filter by service flag combination. See which combinations of service flags your peers advertise. Click any combination to see which providers have peers running those services, then drill to the individual peers.
-
-#### Example: Finding Peers by Service Flag
-
-![Services drill-down: N W NL P](docs/images/services.png)
-
-Click on a service flag combination like **N W NL P** (Network, Witness, Network Limited, P2P V2) to see which providers have peers advertising those flags, how many peers each provider has running that combination, and then break it all the way down to find each individual peer and see it on the map.
-
-**Service flag abbreviations:**
-- **N** = NODE_NETWORK (full blockchain history)
-- **W** = NODE_WITNESS (Segregated Witness support)
-- **NL** = NODE_NETWORK_LIMITED (pruned, last 288 blocks)
-- **P** = P2P_V2 (BIP324 encrypted transport)
-- **CF** = NODE_COMPACT_FILTERS (BIP157/158 compact block filters)
-- **B** = NODE_BLOOM (BIP37 Bloom filter support)
-
----
-
-### Peer Information Popup
-
-![Peer Information Popup - IPv4](docs/images/peerinfopopup.png)
-
-Select any peer, whether from the map, the peer table, or any drill-down panel, to open its full detail popup. The popup is **draggable** (grab the header to move it) and **resizable** (drag the bottom-right corner to stretch it larger).
-
-The **network type badge** sits at the top of the popup border, showing IPv4, IPv6, Tor, I2P, or CJDNS. The border itself is color-coded to match the network type, so you can tell at a glance what kind of connection you're looking at. Only peers on public networks (IPv4 and IPv6) can be geolocated on the map. Peers on private networks (Tor, I2P, CJDNS) have their real locations hidden by design and are placed at Antarctic research stations for visualization (see [Private Networks (Antarctica)](#private-networks-antarctica)).
-
-#### IPv6 (Public Network)
-
-![Peer Information Popup - IPv6](docs/images/ipv6popup-publicnet.png)
-
-IPv6 peers are on a public network, so they have full geolocation data just like IPv4 peers. The popup shows Country, Region, City, ISP, and AS information. The network badge and border color distinguish it from IPv4 at a glance.
-
-#### Tor (Private Network)
-
-![Peer Information Popup - Tor](docs/images/torpopup-privatenet.png)
-
-#### I2P (Private Network)
-
-![Peer Information Popup - I2P](docs/images/i2ppopup-privatenet.png)
-
-#### CJDNS (Private Network)
-
-![Peer Information Popup - CJDNS](docs/images/cjdnspopup-privatenet.png)
-
-Tor, I2P, and CJDNS are **privacy networks**. Their addresses are routed through encrypted overlays, so the peer's real IP and physical location are never exposed. The Location section shows dashes for all fields (Country, Region, City, ISP, AS). These peers are placed at Antarctic research stations on the map purely for visualization. Notice that Tor peers show `127.0.0.1` as their address since traffic arrives through the local Tor daemon, I2P peers show long `.i2p` base32 addresses, and CJDNS peers show `fc00::/8` IPv6 addresses from the CJDNS address space.
-
-**Identity:**
-- Peer ID number, full IP address with port, network type (IPv4/IPv6/Tor/I2P/CJDNS), whether the peer is **Inbound** (they connected to you) or **Outbound** (your node connected to them), and the connection type. Outbound peers will show one of the following subtypes:
-  - **Outbound Full Relay** -- Your node connected for full block and transaction relay (most common outbound type)
-  - **Block Relay Only** -- Your node connected for blocks only, no transaction relay (improves privacy by creating eclipse-resistant connections)
-  - **Manual** -- A peer you manually connected to via `addnode`
-  - **Address Fetch** -- A short-lived connection to learn about other peers' addresses
-  - **Feeler** -- A short-lived connection to test if an address in the address manager is reachable
-- **Your Addr** -- Your node's external IP address as seen by this peer (when available)
-
-**Performance:**
-- **Ping** -- Current round-trip latency to this peer in milliseconds
-- **Min Ping** -- Lowest ping ever recorded for this peer (when available)
-- **Connected** -- How long you have been connected to this peer
-- **Last Send** -- Time since your node last sent data to this peer
-- **Last Recv** -- Time since your node last received data from this peer
-- **Last Block** -- Time since the last block was communicated with this peer
-- **Last Tx** -- Time since the last transaction was communicated with this peer (shows nothing for block-relay-only connections)
-- **Bytes Sent** -- Total data sent to this peer
-- **Bytes Recv** -- Total data received from this peer
-- **Time Offset** -- Clock difference between your node and this peer in seconds (0s means synced)
-
-**Software:**
-- **Version** -- The peer's user agent string (e.g. `/Satoshi:28.0.0/`)
-- **Protocol** -- The peer's protocol version number
-- **Services** -- Full chain history, SegWit, compact filters, and other capability flags the peer advertises (see [Service Flags](#service-flags) for the full list)
-- **Start Height** -- The block height this peer reported when connecting
-- **Synced Hdrs** -- Last header height your node has synced in common with this peer
-- **Synced Blks** -- Last block height your node has synced in common with this peer
-- **Transport** -- v1 (legacy) or v2 (BIP324 encrypted) transport protocol, when available
-- **Session ID** -- The BIP324 session identifier for v2 encrypted connections
-- **Min Fee Filter** -- The minimum fee rate (in sat/kvB) this peer will accept for transaction relay
-
-**Location:**
-- **Country**, **Region**, **City** -- Geographic location from the GeoIP database
-- **ISP** -- The peer's Internet Service Provider
-- **AS** -- Autonomous System number and organization name
-- **Mapped AS** -- The mapped AS number if your node has the asmap configured
-
-**Status:**
-- **Relay Txs** -- Whether this peer relays transactions (No for block-relay-only connections)
-- **Addrman** -- Whether this peer's address is stored in your node's address manager
-- **Addr Relay** -- Whether address relay is enabled for this peer
-- **Addr Stats** -- Number of address messages processed from this peer and how many were rate-limited (shown when non-zero)
-- **BIP152 HB** -- BIP152 high-bandwidth compact block relay status in both directions. "From" means this peer proactively sends you compact blocks; "To" means your node proactively sends compact blocks to them. High-bandwidth mode reduces block propagation delay by sending compact blocks immediately rather than waiting for a request
-- **Permissions** -- Any special permissions granted to this peer (e.g. `noban`, `relay`, `download`), shown when applicable
-- **Hosting** -- Flags whether the peer is on a known cloud/hosting provider
-- **Proxy** -- Flags whether the peer is using a VPN or proxy
-- **Mobile** -- Flags whether the peer is on a mobile network
-
-**Actions:**
-- At the bottom of the popup, click **Disconnect** to drop the connection. A confirmation dialog will appear offering two options: **Disconnect Only** (drops the connection but the peer can reconnect) or **Disconnect + Ban 24h** (drops the connection and bans the IP address for 24 hours). The ban option is available for IPv4 and IPv6 peers only, since Tor, I2P, and CJDNS addresses rotate and banning them has no practical effect.
-
----
-
-### Example: Finding All Peers with a Specific ISP
-
-Here's how the drill-down system works in practice: finding every peer connected through Comcast Cable in the United States:
-
-**Step 1:** In the Peer ISP Diversity Summary, scroll to **Countries** and click **US United States**.
-
-![Step 1: Select United States](docs/images/flowus.png)
-
-**Step 2:** A sub-menu opens showing all providers with peers in the US. Click **AS7922 Comcast Cable**.
-
-![Step 2: Select Comcast Cable](docs/images/flowus2.png)
-
-**Step 3:** All peers connected through Comcast Cable are listed. Click any peer to see its full information and exact location on the map.
-
-![Step 3: View Comcast Cable peers](docs/images/flowus3.png)
-
-This same flow works for any combination: find all residential peers in Germany running Satoshi 30.0.0, or all cloud-hosted peers advertising compact filters, or all IPv6 peers with the fastest ping times. The drill-down system connects everything.
-
----
-
-### Provider Panel: Full Provider Breakdown
-
-![Provider Panel](docs/images/nascreen1.png)
-
-Each provider has its own dedicated panel that appears on the right side of the map when selected. The panel provides a complete breakdown:
-
-- **Peers:** Total, Inbound, and Outbound counts. Click any count to see the specific peers.
-- **Performance:** Average connection duration, average ping latency, total data sent, total data received across all peers on that provider.
-- **Software:** Every Bitcoin Core version being run through that provider, with peer counts. Click any version to see exactly which peers are running it.
-- **Countries:** Every country that provider's peers are in, with counts. Click any country to see the specific peers.
-- **Services:** Every service flag combination advertised by that provider's peers. Click any combination to see exactly which peers are running each set of services.
-
-Every section drills all the way down, from the category, to the list of peers, to the individual peer on the map with its full information. You can explore your entire network without ever leaving the dashboard.
-
----
-
-### Map
-
-The full-screen HTML5 Canvas map displays your node's connected peers as color-coded, animated dots by network type. Peers pulse with a breathing animation that distinguishes inbound from outbound connections.
-
-- **Click any peer dot** to zoom in, draw a connection line, and open the full detail popup
-- **Multiple peers at the same location** are grouped. Click the group to see a list and select individual peers
-- **Animated connection lines** curve from the provider chart to peers on the map when a provider or category is selected
-- **Pan and zoom** with mouse drag and scroll wheel, or use the +/− controls
-
-#### Private Networks (Antarctica)
-
-Peers on private overlay networks (Tor, I2P, CJDNS) route traffic through encrypted tunnels, so their real geographic coordinates are never exposed. These peers are placed at Antarctic research stations on the map purely for visualization. The continent of Antarctica serves as the dedicated home for all anonymous peers, keeping them visually grouped and immediately recognizable.
-
-When you enter Private Network Mode, the map automatically zooms to Antarctica and the text **"PRIVATE NETWORKS"** is displayed across the continent as a reminder that the locations shown are not real and that you are viewing privacy-preserving connections.
-
-Toggle Antarctica visibility from the Table Settings gear menu on the peer list.
-
----
-
-### Private Network Mode
-
-![Private Networks Main View](docs/images/privatenetworksmain.png)
-
-If your node is connected to any of the private overlay networks (Tor, I2P, CJDNS), a dedicated **Private Networks** donut chart becomes available. Click any private network chip on the top bar, or click the Private Networks mini donut, to enter Private Network Mode.
-
-Private Network Mode behaves similarly to the public peer provider analysis but is purpose-built for anonymous connections. The donut chart shows the distribution of your private peers across Tor, I2P, and CJDNS, with the total anonymous peer count displayed in the center. The map zooms to Antarctica where all private peers are visualized, and the accompanying panel provides a full breakdown of your anonymous connections.
-
-The Private Networks panel lets you explore your anonymous peers through multiple dimensions:
-
-- **Most Stable Peer:** peers ranked by connection duration, showing your longest-running anonymous connections
-- **Fastest Peer:** peers ranked by ping latency across all private networks
-- **Most Data Sent To / Received By:** peers ranked by data volume in each direction
-- **Software:** Bitcoin Core versions running across your private network peers
-- **Services:** service flag combinations advertised by anonymous peers
-
-Because these are privacy networks, location and provider information are intentionally absent — there are no countries, ISPs, or AS numbers to display. Every other drill-down works the same way: click a category to see ranked peers, click any peer to open its full detail popup and see its connection on the map.
-
-![Private Network Peer Info](docs/images/privatenetworkpeerinfo.png)
-
-*Selecting the I2P segment on the private donut opens the I2P network panel. Clicking an individual I2P peer zooms to its position in Antarctica and opens the full peer detail popup with connection stats, software version, service flags, and more. The peer's `.b32.i2p` address is shown but its real location remains hidden by design.*
-
-You can exit Private Network Mode at any time by clicking blank space on the map or pressing Escape, which zooms back to the world view and returns to the public peer analysis.
-
----
-
-### Peer List
-
-![Peer List](docs/images/N-Peer-List.png)
-
-The bottom panel shows all connected peers in a sortable, filterable table with 33 available columns.
-
-**Title bar features:**
-- **Network filters:** filter by All, IPv4, IPv6, Tor, I2P, or CJDNS (with live peer counts)
-- **Connect Peer:** manually connect to a new peer in any supported format
-- **Banned Peers:** view and manage the ban list
-- **NODE-INFO:** open the node information modal (version, blockchain, mempool details)
-- **MBCORE-DB:** open the GeoIP database modal (stats, auto-update toggle, manual update)
-- **FIT:** auto-size columns to fit content
-- **▼:** collapse/expand the peer table
-- **⚙:** table settings (transparency, visible rows, column toggles, Antarctica setting)
-
-**Table features:**
-- **Sortable:** click any column header (cycles: unsorted → ascending → descending). Sent, Received, Duration, and Ping columns sort numerically by actual values.
-- **Resizable:** drag column edges to adjust width
-- **Click to fly:** click any row to zoom to that peer on the map
-- **Visible rows:** configurable from the table settings gear (default: 15 rows visible, scrollable beyond)
-
-#### Default Columns (16 visible)
-
-| Column | Label | Description |
-|--------|-------|-------------|
-| ID | ID | Peer identifier assigned by Bitcoin Core |
-| Net | Net | Network type: IPv4, IPv6, Tor, I2P, or CJDNS |
-| Duration | Duration | How long the peer has been connected (formatted as hours/minutes/seconds) |
-| Type | Type | Connection type and direction (see connection types below) |
-| IP:Port | IP:Port | Peer's network address and port |
-| Software | Software | The peer's Bitcoin Core version string (subver) |
-| Services | Services | Service flags advertised by the peer (see service flags below) |
-| City | City | Geolocated city |
-| Region | Region | State or province |
-| Country | Country | Country name |
-| Continent | Cont. | Continent abbreviation |
-| ISP | ISP | Internet Service Provider |
-| Ping | Ping | Round-trip latency in milliseconds |
-| Sent | Sent | Total bytes sent to this peer |
-| Received | Recv | Total bytes received from this peer |
-| Addrman | Addrman | Whether this peer's address is in Bitcoin Core's address manager (Yes/No) |
-
-#### Advanced Columns (17 additional, hidden by default)
-
-Enable these from the Table Settings gear menu. These provide deeper geolocation and network metadata.
-
-| Column | Label | Description |
-|--------|-------|-------------|
-| Direction | Dir | IN or OUT (raw direction without connection type) |
-| Country Code | CC | Two-letter country code (e.g. US, DE, JP) |
-| Continent Code | CntC | Continent code (e.g. NA, EU, AS) |
-| Latitude | Lat | Geographic latitude (2 decimal places) |
-| Longitude | Lon | Geographic longitude (2 decimal places) |
-| Region Code | Rgn | State/province abbreviation code |
-| AS Number | AS | Autonomous System number (e.g. AS13335) |
-| AS Name | AS Name | Organization that owns the AS (e.g. Cloudflare, Hetzner) |
-| District | District | Sub-city regional subdivision (where available) |
-| Mobile | Mob | Whether the peer is on a mobile/cellular network (Y/N) |
-| Organization | Org | Organization name associated with the IP |
-| Timezone | TZ | Peer's timezone (e.g. America/New_York) |
-| Currency | Curr | Local currency for the peer's country |
-| Hosting | Host | Whether the IP belongs to a hosting/datacenter provider (Y/N) |
-| UTC Offset | UTC | UTC offset in seconds |
-| Proxy | Proxy | Whether the IP is a known proxy (Y/N) |
-| ZIP | ZIP | Postal/ZIP code |
-
-#### Connection Types
-
-The **Type** column shows how each peer is connected. Outbound peers include the subtype after a slash (e.g. `OUT/OFR`). Hover any type for the full description.
-
-| Abbreviation | Full Name | Description |
-|-------------|-----------|-------------|
-| IN | Inbound | A peer that connected to your node |
-| OFR | Outbound Full Relay | Your node connected for full block and transaction relay |
-| BRO | Block Relay Only | Your node connected for blocks only (no transaction relay, for privacy) |
-| MAN | Manual | A peer you manually connected to via `addnode` |
-| AF | Address Fetch | A short-lived connection to learn about other peers' addresses |
-| FLR | Feeler | A short-lived connection to test if an address in the address manager is reachable |
-
-#### Service Flags
-
-The **Services** column shows abbreviated service flags that each peer advertises. These indicate what capabilities the peer supports. Hover over the services cell to see full descriptions.
-
-| Flag | Name | Bitcoin Core Constant | What It Means |
-|------|------|----------------------|---------------|
-| **N** | Network | NODE_NETWORK | The peer stores and serves the **complete blockchain history**. It can provide any historical block on request. Most full nodes advertise this flag. |
-| **W** | Witness | NODE_WITNESS | The peer supports **Segregated Witness** (SegWit). It can relay and validate witness data for transactions. Nearly all modern nodes have this. |
-| **NL** | Network Limited | NODE_NETWORK_LIMITED | The peer stores only the **last 288 blocks** (roughly 2 days of history). This is typical of pruned nodes that keep a minimal chain tail. NL peers can still relay new blocks and transactions normally. |
-| **P** | P2P V2 | P2P_V2 | The peer supports **BIP324 encrypted transport**. All traffic between your node and this peer is encrypted, preventing passive eavesdropping on the connection. |
-| **CF** | Compact Filters | NODE_COMPACT_FILTERS | The peer serves **BIP157/158 compact block filters**, which allow lightweight clients to privately determine whether a block contains relevant transactions without downloading the full block. |
-| **B** | Bloom | NODE_BLOOM | The peer supports **BIP37 Bloom filters**, an older lightweight client protocol. Bloom filters allow SPV wallets to request only transactions matching a filter pattern, though they leak some privacy to the serving node. |
-
-A typical modern full node will show `N W P` (full chain, SegWit, encrypted transport). A pruned node will show `NL W P` instead of `N W P`.
-
----
-
-### Map Settings
-
-Click the **gear icon** below the Bitcoin price area to open Map Settings:
-
-- **Update Frequency:** configure how often peer data and node info are refreshed (3-120 seconds)
-- **Show / Hide:** toggle visibility of the Service Provider Diversity donut, Bitcoin price display, and system stats overlay
-- **Advanced:** opens the Advanced Display Settings panel (see below)
-
-### Advanced Display Settings
-
-Click **Advanced** at the bottom of the Map Settings popup to open a floating, draggable panel with full control over the map's visual appearance. All changes are live and you see the effect immediately as you drag each slider.
-
-**Theme**
-
-Choose from four built-in themes that set all sliders to curated presets:
-- **Dark:** the original dark canvas dashboard, ideal for low-light environments
-- **Light:** bright, clean interface with green land and blue ocean, best for well-lit rooms
-- **OLED:** pure black for OLED screens, maximum contrast, minimum power draw
-- **Midnight:** deep indigo-blue tones with purple accents, rich and atmospheric
-
-**Service Provider Diversity**
-- **Line Thickness:** width of the connection lines drawn from the donut to peers on the map (default 30)
-- **Line Fanning:** how much curved lines spread apart when multiple peers share the same location (default 50)
-
-**Peer Effects**
-- **Shimmer:** ambient twinkle intensity for long-lived peers (0 = off, which is the default)
-- **Pulse Depth In / Out:** how deep the breathing pulse goes for inbound vs outbound peers
-- **Pulse Speed In / Out:** how fast the pulse cycles (50 = original speed)
-
-**Land**
-- **Hue:** shift the land color across the full spectrum (default 215 = dark blue-gray)
-- **Brightness:** darken or brighten the landmasses
-- **Snow the Poles:** gradually frost Antarctica and Arctic regions with an icy gray-white
-
-**Ocean**
-- **Preset:** choose between Original (full hue range) and Light Blue (constrained sky blue range)
-- **Hue:** shift the ocean color (range depends on selected preset)
-- **Brightness:** darken or brighten the ocean and lakes
-
-**Lat/Lon Grid**
-- **Visible:** toggle the latitude/longitude grid on or off
-- **Thickness:** grid line width
-- **Hue:** shift the grid line color
-- **Brightness:** grid line opacity
-
-**Borders**
-- **Thickness:** scale country and state/region borders together (0 = hidden, 50 = default, 100 = 2x thick)
-- **Hue:** shift the border line color
-
-**HUD Overlays**
-- **Solid Backgrounds:** adds semi-opaque backgrounds behind stats, price, and info panels for improved readability on lighter maps
-
-**Saving and Resetting**
-- **Session Save:** keeps your settings for the current session only (closes the panel)
-- **Permanent Save:** persists your settings to localStorage so they survive browser refreshes and new sessions
-- **Reset:** snaps every slider back to the original defaults and resets the theme to Dark
-- Every slider label is a clickable link that resets just that one slider to its default
-
-### Table Settings
-
-The gear (⚙) button on the peer list title bar opens Table Settings:
-- **Transparency:** adjust panel opacity (0-100% slider)
-- **Visible Rows:** control how many peer rows are displayed before scrolling (3-40, default 15)
-- **Column Toggles:** show or hide any column
-- **Private Networks:** toggle Antarctica display for Tor/I2P/CJDNS peers
-- **Defaults:** restore default columns, transparency, visible rows, and all settings
-
-### Connect Peer
-
-![Connect Peer](docs/images/10.connect.png)
-
-Click **Connect Peer** to manually connect to a new peer. Enter an address in any supported format (IPv4, IPv6, Tor .onion, I2P .b32.i2p, CJDNS). The modal auto-generates the `bitcoin-cli addnode` command and a `bitcoin.conf` entry you can copy.
-
-### Disconnect and Ban Peers
-
-![Disconnect Peer](docs/images/11.disconnect.png)
-
-Click the **Disconnect** button on any peer row in the table, or from a peer detail popup, to open the disconnect dialog. You can disconnect only, or disconnect and **ban the IP for 24 hours** (ban option available for IPv4/IPv6 peers only). Manage all active bans from the **Banned Peers** button in the peer list title bar.
-
----
-
-## Main Menu
-
-![Main Menu](docs/images/5.menu.png)
-
-| Option | Description |
-|--------|-------------|
-| **1) Enter MBCore Dashboard** | Launch the web dashboard |
-| **2) Reset MBCore Config** | Clear saved configuration (option to keep or delete database) |
-| **3) Firewall Helper** | Detect your network and configure UFW to allow dashboard access from other devices |
-| **g) Geo/IP Database** | Manage the GeoIP cache, toggle auto-updates, check integrity, purge old entries |
-| **m) Manual Settings** | Manually enter Bitcoin Core paths if auto-detection didn't work |
-| **n) Network/Port** | Server security, access mode (local-only vs LAN), and port settings |
-| **u) Update** | Update to the latest version (appears when an update is available) |
-| **q) Quit** | Exit |
-
-### Geo/IP Database Settings
-
-![Geo/IP Database Settings](docs/images/3.geomenu.png)
-
-Manage the local GeoIP cache database. Toggle auto-updates on or off, check database integrity, view stats, download the latest dataset, or purge old entries. The auto-update setting syncs with the web dashboard. Toggling it in one place updates the other.
-
-### Network/Port Settings
-
-![Network/Port Settings](docs/images/4.portset.png)
-
-Change the dashboard port if 58333 conflicts with another service, or switch between LAN-accessible (0.0.0.0) and local-only (127.0.0.1) server modes. Local-only mode restricts the dashboard to the machine running Bitcoin Core. LAN mode (default) allows access from any device on your network. All settings persist across restarts and updates.
-
-### Firewall Helper
-
-The Firewall Helper (option **3**) assists with opening the dashboard port so other devices on your local network can access it. It detects your IP, subnet, and firewall status, then offers to add the rule for you and provides the command to reverse it later. You can also open the port manually if you prefer. This is only needed if you want to view the dashboard from another device on your local network (e.g. a laptop, phone, or another machine on the same Wi-Fi or LAN). Opening this port to the public internet is not recommended.
-
-### Automatic Updates
-
-MBCore Dashboard has two independent auto-update systems: one for the application itself and one for the GeoIP database.
-
-**System Update Check (Application)**
-
-The dashboard automatically checks GitHub for new versions of MBCore Dashboard:
-- Checks on dashboard startup, then every 55 minutes while the dashboard is open
-- The backend fetches the remote `VERSION` file from the GitHub repository and compares it to the locally installed version
-- Results are cached for 30 minutes to avoid excessive network requests
-- When a new version is available, a banner appears in the top-right corner of the dashboard: **"Update Available! v7.5.1 -> v7.5.2"** (for example)
-- Hover the banner to see the changelog (pulled from the `CHANGES` file) and instructions for how to update
-- From the terminal menu, use **u) Update** to pull the latest version via `git pull` and auto-restart
-
-**GeoIP Database Auto-Update**
-
-The GeoIP database that stores peer locations can also update itself:
-- When enabled, the database syncs from the [Bitcoin Node GeoIP Dataset](https://github.com/mbhillrn/Bitcoin-Node-GeoIP-Dataset) at startup and once per hour while the dashboard is running
-- Toggle auto-update on/off from the dashboard's **MBCORE-DB** modal (green/red slider) or from the terminal's **g) Geo/IP Database** menu
-- The setting syncs between the dashboard and terminal. Toggling it in one place updates the other
-- A brief status message appears in the top bar during updates: countdown, checking, and result ("DB already up to date" or "DB successfully updated")
-- When auto-update is disabled, the database still works with whatever data it already has cached
-
----
-
-## How It Works
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        YOUR MACHINE                             │
-│                                                                 │
-│  ┌──────────────┐      bitcoin-cli      ┌──────────────────┐   │
-│  │   bitcoind   │ ◄──────────────────► │  FastAPI Server   │   │
-│  │ (Bitcoin Core)│        RPC           │  (Python :58333)  │   │
-│  └──────────────┘                       └────────┬──────────┘   │
-│                                                  │              │
-│                                       HTTP + SSE │              │
-│                                                  ▼              │
-│                                       ┌──────────────────┐      │
-│                                       │   Web Browser    │      │
-│                                       │  (Canvas Map)    │      │
-│                                       └──────────────────┘      │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-`./da.sh` auto-detects your Bitcoin Core node, launches a FastAPI server on port 58333, and serves the dashboard to your browser. Peer data updates via Server-Sent Events (SSE) for real-time changes.
-
-Geolocation uses automated IP geolocation API services such as [ip-api.com](http://ip-api.com) (free, no API key required) for new peers, with results cached in a local SQLite database (`./data/geo.db`). The [Bitcoin Node GeoIP Dataset](https://github.com/mbhillrn/Bitcoin-Node-GeoIP-Dataset) provides pre-cached locations for tens of thousands of known Bitcoin node addresses and grows daily. Every new unique address your node encounters is added to your local database automatically. The system periodically checks the dataset repository for newly discovered addresses and merges only what you don't already have. Your locally discovered addresses stay local and are never uploaded to the repository.
-
-Service provider diversity analysis runs entirely client-side. Peer AS (Autonomous System) data is aggregated in the browser, the diversity score is calculated from the distribution, and the donut chart, legend, and detail panel are rendered in real time as peers connect and disconnect.
-
-### Network & Security
-
-MBCore Dashboard runs a local web server on your machine and is designed to be accessed from your local network. It binds to your machine's network interface so that other devices on your LAN (a phone, laptop, or another machine on the same Wi-Fi) can view the dashboard in a browser. It is not accessible from the internet unless you explicitly port-forward it through your router, which is not recommended.
-
-Peer geolocation uses automated IP geolocation API services to look up publicly available location data for connected peers. This is the same type of information any website you visit already sees. The geolocation API transmits over HTTP due to free tier service requirements, which is standard for these lookups and poses no risk to your node as long as your local network is trusted and secured.
-
-The GeoIP database updates automatically from the [Bitcoin Node GeoIP Dataset](https://github.com/mbhillrn/Bitcoin-Node-GeoIP-Dataset) via HTTPS and can be toggled off from the dashboard or terminal menu. Downloaded databases are validated against the expected SQLite structure before merging to ensure integrity. Application updates are pulled via git from this repository over HTTPS.
-
----
-
-## Docker
-
-Docker is an additional deployment option; the existing native `./da.sh` workflow remains unchanged. The image is built directly from the checked-out repository and contains MBCore, Python, and `bitcoin-cli`. It does not contain `bitcoind` and does not need the Bitcoin blockchain or datadir mounted into it.
-
-### Build the image
+Edit `.env` with the node's RPC address and credentials, then start the application:
 
 ```bash
-docker build -t mbcore .
+BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose up -d --build
+docker compose logs -f bpm
 ```
 
-### Docker Compose example
+Open `http://localhost:58333`.
 
-Copy the example environment file values into `.env` (which is excluded from the image):
-
-```ini
-BITCOIN_RPC_USER=mbcore
-BITCOIN_RPC_PASSWORD=change-me
-```
-
-Create the external network once, then build and start MBCore:
+To stop the application:
 
 ```bash
-docker network create bitcoin-rpc
-docker compose -f compose.example.yaml build
-docker compose -f compose.example.yaml up -d
-docker compose -f compose.example.yaml logs -f mbcore
+docker compose down
 ```
 
-Open `http://localhost:58333`. Application data and settings are stored in the `mbcore-data` volume at `/opt/mbcore/data`.
+Application data remains in the `bitcoin-peer-map-data` volume.
 
-The Bitcoin node may be in another Compose project or on another host. For separate Compose projects, attach both services to the same external `bitcoin-rpc` network and set `BITCOIN_RPC_HOST` to the Bitcoin service or container hostname. Docker DNS then resolves that name without sharing the Bitcoin datadir.
+## Bitcoin RPC
 
-### Environment variables
+Bitcoin Peer Map communicates directly with Bitcoin's JSON-RPC interface over HTTP or HTTPS. It does not execute `bitcoin-cli` or write credentials to a generated configuration file.
 
-| Variable | Required | Default | Description |
-|---|---:|---|---|
-| `BITCOIN_RPC_HOST` | No | `bitcoin` | Bitcoin Core/Knots RPC hostname or address |
-| `BITCOIN_RPC_PORT` | No | `8332` | RPC port |
-| `BITCOIN_RPC_USER` | Yes | — | Dedicated RPC username |
-| `BITCOIN_RPC_PASSWORD` | Yes* | — | RPC password |
-| `BITCOIN_RPC_PASSWORD_FILE` | Yes* | — | Path to a Docker/Kubernetes secret containing the RPC password |
-| `MBTC_NETWORK` | No | `main` | `main`, `test`, `signet`, or `regtest` |
-| `MBTC_WEB_PORT` | No | `58333` | Dashboard listen port |
-| `MBTC_WEB_BIND` | No | `0.0.0.0` | `0.0.0.0` or `127.0.0.1` |
-| `GEO_DB_ENABLED` | No | existing value or `true` | Enable the local GeoIP database |
-| `GEO_DB_AUTO_UPDATE` | No | existing value or `true` | Automatically update the GeoIP database |
-
-*Set exactly one of `BITCOIN_RPC_PASSWORD` or `BITCOIN_RPC_PASSWORD_FILE`. For a Compose secret, mount the secret and set, for example, `BITCOIN_RPC_PASSWORD_FILE=/run/secrets/bitcoin_rpc_password`. Bind-mounted password files must be readable by the container user (`mbcore`, UID 100), or the startup check will fail before RPC validation. RPC credentials are written only to `/tmp/mbcore/bitcoin.conf` with mode `0600`; the password is not stored in the persistent MBCore data volume.
-
-When `GEO_DB_ENABLED` or `GEO_DB_AUTO_UPDATE` is omitted, an existing value in `data/config.conf` is preserved across restarts. Supplying either variable explicitly overrides the persisted value on each container start.
-
-The entrypoint verifies RPC connectivity with `bitcoin-cli getnetworkinfo` before starting the web server. Invalid credentials, an unreachable node, or an incorrect network causes a clear startup failure instead of an unusable dashboard.
-
-### Configure the remote Bitcoin node
-
-The Bitcoin Core/Knots node must accept RPC connections from the Docker network. A typical configuration includes:
+A minimal node configuration for a dedicated RPC account resembles:
 
 ```ini
 server=1
 rpcbind=0.0.0.0
-rpcallowip=<docker-network-subnet>
+rpcallowip=192.168.1.0/24
+rpcuser=bpm
+rpcpassword=replace-with-a-long-random-password
 ```
 
-Restrict `rpcallowip` to the actual Docker network subnet. Use dedicated MBCore credentials; for production, prefer Bitcoin Core's `rpcauth` mechanism over keeping a plaintext `rpcpassword` in the node's configuration. MBCore still needs the original cleartext password through one of the container variables above so `bitcoin-cli` can authenticate.
+Restrict `rpcbind` and `rpcallowip` to the interface and subnet that actually need access. Do not expose Bitcoin RPC to the public internet. Prefer `rpcauth` over plaintext `rpcuser` and `rpcpassword` in the node configuration where practical.
 
-### Security and container limitations
+Bitcoin Core and Bitcoin Knots must be restarted after their RPC configuration changes.
 
-MBCore can run administrative RPC commands, including adding or disconnecting peers and managing bans. Do **not** expose port `58333` directly to the public Internet. LAN-only access is the recommended default; add authentication and access controls in a trusted reverse proxy if broader access is required.
+### Another Compose Project
 
-Bitcoin data obtained through RPC continues to work normally, including peer and ban management, blockchain, mempool, network, and GeoIP/ASN information. System widgets that read `/proc`, `/`, or network interfaces report the MBCore container's CPU, RAM, disk, and network environment—not the separate Bitcoin node host/container—and may therefore be less useful or misleading.
+For a Bitcoin node in another Compose project, attach both projects to a shared external network. A Compose override for Bitcoin Peer Map can make its default network external:
 
----
-
-## Compatibility
-
-**Tested:**
-- Ubuntu 22.04, 24.04, Linux Mint, Debian
-
-**Should work:**
-- Fedora, Arch Linux
-
-If you run into issues on your system, [open an issue](https://github.com/mbhillrn/Bitcoin-Core-Peer-Map/issues).
-
----
-
-## Dependencies
-
-All dependencies are automatically detected and installed on first run.
-
-| Tool | Purpose |
-|------|---------|
-| `bitcoin-cli` / `bitcoind` | Bitcoin Core RPC interface and daemon |
-| `python3` | Python 3.8+ interpreter |
-| `jq`, `curl`, `sqlite3` | JSON parsing, HTTP requests, database |
-| `fastapi`, `uvicorn`, `jinja2`, `sse-starlette` | Web server (installed in local `./venv/`) |
-
----
-
-## Project Structure
-
-```
-Bitcoin-Core-Peer-Map/
-├── da.sh              # Main entry point
-├── lib/               # Shell libraries (UI, config, prereqs)
-├── scripts/           # Bitcoin Core detection
-├── web/               # FastAPI server + frontend (HTML5 Canvas)
-├── data/              # Local database and config (created on first run)
-└── venv/              # Python virtual environment (created on first run)
+```yaml
+networks:
+  default:
+    external: true
+    name: bitcoin-rpc
 ```
 
----
+Set `BITCOIN_RPC_HOST` to the Bitcoin service or container hostname on that network.
 
-## Troubleshooting
+## Configuration
 
-| Problem | Solution |
-|---------|----------|
-| Dashboard won't load from another device | Use the **Firewall Helper** (option 3) or manually allow port 58333 |
-| Dashboard won't load at all | Close old browser tabs, check `ss -tlnp \| grep 58333` for port conflicts |
-| Bitcoin Core not detected | Make sure `bitcoind` is running, or use **m) Manual Settings** |
-| Peers show "Unknown" location | Geolocation is in progress, new peers are looked up as they connect |
+Container configuration is read exclusively from environment variables at startup.
 
----
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `BITCOIN_RPC_SCHEME` | No | `http` | RPC transport, `http` or `https` |
+| `BITCOIN_RPC_HOST` | Yes | - | Bitcoin Core/Knots RPC hostname or address |
+| `BITCOIN_RPC_PORT` | No | `8332` | RPC port |
+| `BITCOIN_RPC_USER` | Yes | - | Dedicated RPC username |
+| `BITCOIN_RPC_PASSWORD` | Yes* | - | RPC password |
+| `BITCOIN_RPC_PASSWORD_FILE` | Yes* | - | Path to a mounted secret containing the RPC password |
+| `BITCOIN_RPC_VERIFY_TLS` | No | `true` | Verify the RPC HTTPS certificate |
+| `BITCOIN_RPC_TIMEOUT` | No | `30` | Per-request timeout in seconds |
+| `BITCOIN_NETWORK` | No | `main` | `main`, `test`, `signet`, or `regtest` |
+| `BPM_RPC_STARTUP_TIMEOUT` | No | `30` | Time to wait for the node during startup |
+| `BPM_HOST_PORT` | No | `58333` | Port published on the Docker host |
+| `BPM_LISTEN_PORT` | No | `58333` | Port used inside the container |
+| `BPM_GEOIP_ENABLED` | No | `true` | Enable the persistent GeoIP database |
+| `BPM_GEOIP_AUTO_UPDATE` | No | saved setting | Override automatic GeoIP dataset updates |
+
+*Set one of `BITCOIN_RPC_PASSWORD` or `BITCOIN_RPC_PASSWORD_FILE`.*
+
+For a Compose secret, add an override similar to:
+
+```yaml
+services:
+  bpm:
+    environment:
+      BITCOIN_RPC_PASSWORD: ""
+      BITCOIN_RPC_PASSWORD_FILE: /run/secrets/bitcoin_rpc_password
+    secrets:
+      - bitcoin_rpc_password
+
+secrets:
+  bitcoin_rpc_password:
+    file: ./secrets/bitcoin_rpc_password
+```
+
+## Persistence
+
+The named volume is mounted at `/var/lib/bitcoin-peer-map` and contains only mutable application data:
+
+- `geo.db`: peer geolocation cache
+- `settings.json`: dashboard preferences that must survive restarts
+- `tmp/`: staging area for GeoIP database updates
+
+RPC credentials are never written to the volume. Browser display preferences remain in browser local storage under `bpm.*` keys.
+
+## Build Revision
+
+The header displays the first 12 characters of the Git commit embedded in the image and links to that exact commit on GitHub. Pass the full commit SHA whenever the image is built:
+
+```bash
+BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose build
+```
+
+GitHub Actions passes `GITHUB_SHA` directly to the Docker build. Images built without `BPM_BUILD_REVISION` display `unknown` rather than an inaccurate revision.
+
+## Container Security
+
+The example deployment:
+
+- runs as the unprivileged `bpm` user with UID/GID `10001`
+- uses a read-only root filesystem
+- drops all Linux capabilities
+- enables `no-new-privileges`
+- limits writable paths to the data volume and a 64 MiB `/tmp` tmpfs
+- exposes a dedicated `/healthz` container health check
+
+## Operations
+
+Rebuild and recreate after pulling changes:
+
+```bash
+git pull
+BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose up -d --build
+```
+
+Inspect status and health:
+
+```bash
+docker compose ps
+docker inspect bitcoin-peer-map-bpm-1 --format '{{.State.Health.Status}}'
+```
+
+View logs:
+
+```bash
+docker compose logs -f --tail=100 bpm
+```
+
+## Architecture
+
+```text
+bitcoin-peer-map/
+├── src/
+│   ├── api/                 # FastAPI routers grouped by domain
+│   ├── services/            # Peer, node, GeoIP, connectivity, and metric services
+│   ├── static/              # Browser JavaScript, CSS, and map assets
+│   ├── templates/           # Jinja templates
+│   ├── app.py               # FastAPI application factory and lifespan
+│   ├── runtime.py           # Service composition and worker lifecycle
+│   ├── settings.py          # Typed environment configuration
+│   ├── rpc.py               # Direct Bitcoin JSON-RPC client
+│   └── main.py              # Container process entrypoint
+├── tests/                   # Python and JavaScript tests
+├── Dockerfile
+├── compose.yaml
+├── requirements.txt
+└── pyproject.toml
+```
+
+The application uses FastAPI lifespan hooks to start and stop peer polling, GeoIP enrichment, connectivity monitoring, and container metric workers. API routers obtain services through the application runtime rather than module-level global state.
+
+## Development and Tests
+
+The production image installs dependencies directly into the container's Python installation and runs `src/main.py`. A virtualenv inside the image would duplicate isolation already provided by the container and is intentionally not used.
+
+Run the same Python checks used by CI without installing Python dependencies or generated
+package metadata on the host:
+
+```bash
+docker run --rm -v "$PWD:/source:ro" python:3.12-slim \
+  sh -c 'cp -a /source /app && cd /app && pip install -r requirements-test.txt && \
+  ruff format --check src tests && ruff check src tests && pytest -q'
+```
+
+Run the JavaScript checks:
+
+```bash
+node --check src/static/js/app.js
+node --check src/static/js/as-diversity.js
+node tests/test_as_diversity.js
+```
+
+Validate the deployment definition and image:
+
+```bash
+BITCOIN_RPC_USER=test BITCOIN_RPC_PASSWORD=test \
+  docker compose config --quiet
+docker build --build-arg BPM_BUILD_REVISION="$(git rev-parse HEAD)" \
+  -t bitcoin-peer-map:test .
+```
 
 ## License
 
-MIT License. Free to use, modify, and distribute.
+MIT License. See [LICENSE](LICENSE).
 
-## Support
-
-If you're feeling generous:
-
-**Bitcoin:** `bc1qy63057zemrskq0n02avq9egce4cpuuenm5ztf5`
-
----
-
-**Bitcoin Node Monitor | Bitcoin Core GUI | Bitcoin Peer Map | Bitcoin Network Visualizer | Bitcoin Node Dashboard | Bitcoin Core Peer Explorer | Bitcoin ISP Diversity | Bitcoin Autonomous System Analyzer | Bitcoin P2P Network Map | Bitcoin Core Connection Manager | Geolocated Bitcoin Peers | Bitcoin Node Geolocation | Bitcoin Peer Analytics | Bitcoin Network Health | Bitcoin Core RPC Dashboard | Bitcoin Node Tools | Bitcoin Peer Statistics | Bitcoin Core Monitoring | Bitcoin Network Explorer | Bitcoin Service Provider Analysis | Bitcoin Core Real-Time Map | Bitcoin Peer Tracker | Bitcoin Core Admin Panel | Bitcoin Core IPv4 IPv6 Tor I2P CJDNS**
-
----
-
-*Created by [@mbhillrn](https://github.com/mbhillrn/Bitcoin-Core-Peer-Map)*
+inspired by [mbhillrn](https://github.com/mbhillrn).
