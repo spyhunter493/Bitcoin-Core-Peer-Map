@@ -4287,6 +4287,143 @@
         });
     }
 
+    function chainTipEscapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        }[ch]));
+    }
+
+    function fmtChainTipDateTime(seconds) {
+        if (!seconds) return '\u2014';
+        return new Date(seconds * 1000).toLocaleString();
+    }
+
+    function fmtChainTipAge(seconds) {
+        if (seconds == null || seconds < 0) return '\u2014';
+        if (seconds < 60) return `${seconds}s`;
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+        return `${Math.floor(seconds / 86400)}d`;
+    }
+
+    function shortChainTipHash(hash) {
+        if (!hash) return '\u2014';
+        if (hash.length <= 20) return hash;
+        return `${hash.substring(0, 10)}\u2026${hash.substring(hash.length - 8)}`;
+    }
+
+    function chainTipExplorerUrl(hash, chain) {
+        if (!hash) return null;
+        const paths = {
+            main: '',
+            test: '/testnet',
+            testnet4: '/testnet4',
+            signet: '/signet',
+        };
+        const chainPath = paths[chain];
+        if (chainPath == null) return null;
+        return `https://mempool.space${chainPath}/block/${encodeURIComponent(hash)}`;
+    }
+
+    function chainTipStatusClass(status) {
+        const safeStatus = String(status || 'unknown').toLowerCase().replace(/[^a-z0-9-]/g, '-');
+        return `chain-tip-status-${safeStatus}`;
+    }
+
+    function chainTipSummaryItem(label, value, title) {
+        const safeValue = chainTipEscapeHtml(value);
+        const safeTitle = chainTipEscapeHtml(title || value);
+        return `<div class="chain-tip-summary-item" title="${safeTitle}"><span class="chain-tip-summary-label">${chainTipEscapeHtml(label)}</span><span class="chain-tip-summary-val">${safeValue}</span></div>`;
+    }
+
+    function renderChainTipsModal(data) {
+        if (!data || data.success === false) {
+            const error = data && data.error ? data.error : 'Could not load chain tips';
+            return `<div style="color:var(--err)">${chainTipEscapeHtml(error)}</div>`;
+        }
+
+        const summary = data.summary || {};
+        const tips = Array.isArray(data.tips) ? data.tips : [];
+        let html = '<div class="modal-section-title">Summary</div>';
+        html += '<div class="chain-tip-summary-grid">';
+        html += chainTipSummaryItem('Best Height', summary.best_height != null ? summary.best_height.toLocaleString() : '\u2014');
+        html += chainTipSummaryItem('Tips', summary.total != null ? summary.total.toLocaleString() : tips.length.toLocaleString());
+        html += chainTipSummaryItem('Active', summary.active_count != null ? summary.active_count.toLocaleString() : '\u2014');
+        html += chainTipSummaryItem('Non-active', summary.non_active_count != null ? summary.non_active_count.toLocaleString() : '\u2014');
+        html += chainTipSummaryItem('Forks', summary.fork_count != null ? summary.fork_count.toLocaleString() : '\u2014');
+        const latestNonActive = summary.latest_non_active_height != null
+            ? `#${summary.latest_non_active_height.toLocaleString()} ${summary.latest_non_active_status || ''}`.trim()
+            : 'None';
+        html += chainTipSummaryItem('Last Fork', latestNonActive);
+        html += '</div>';
+
+        if (summary.best_hash) {
+            const bestHash = shortChainTipHash(summary.best_hash);
+            html += mrow('Best Block Hash', chainTipEscapeHtml(bestHash), 'Best block hash on the active chain', chainTipEscapeHtml(summary.best_hash));
+        }
+
+        html += '<div class="modal-section-title">Chain Tips</div>';
+        if (!tips.length) {
+            html += '<div style="color:var(--text-muted);padding:4px 0">No chain-tip data returned</div>';
+            return html;
+        }
+
+        if (!summary.non_active_count) {
+            html += '<div style="color:var(--ok);padding:4px 0">No forked or stale chain tips reported</div>';
+        }
+
+        html += '<div class="chain-tip-table-wrap"><table class="chain-tip-table">';
+        html += '<colgroup><col style="width:120px"><col style="width:90px"><col style="width:82px"><col style="width:180px"><col style="width:74px"></colgroup>';
+        html += '<thead><tr><th>Status</th><th>Height</th><th>Branch</th><th>Hash</th><th>Age</th></tr></thead><tbody>';
+        for (const tip of tips) {
+            const status = tip.status || 'unknown';
+            const statusLabel = tip.status_label || status;
+            const height = tip.height != null ? Number(tip.height).toLocaleString() : '\u2014';
+            const branchLength = tip.branch_length != null ? Number(tip.branch_length).toLocaleString() : '\u2014';
+            const hash = tip.hash || '';
+            const hashTitle = chainTipEscapeHtml(hash);
+            const hashText = chainTipEscapeHtml(shortChainTipHash(hash));
+            const url = chainTipExplorerUrl(hash, summary.chain);
+            const hashCell = url
+                ? `<a class="chain-tip-link chain-tip-mono" href="${url}" target="_blank" rel="noopener" title="${hashTitle}">${hashText}</a>`
+                : `<span class="chain-tip-mono" title="${hashTitle}">${hashText}</span>`;
+            html += '<tr>';
+            html += `<td><span class="chain-tip-status ${chainTipStatusClass(status)}">${chainTipEscapeHtml(statusLabel)}</span></td>`;
+            html += `<td class="chain-tip-mono num">${chainTipEscapeHtml(height)}</td>`;
+            html += `<td class="chain-tip-mono num">${chainTipEscapeHtml(branchLength)}</td>`;
+            html += `<td>${hashCell}</td>`;
+            html += `<td title="${chainTipEscapeHtml(fmtChainTipDateTime(tip.time))}">${chainTipEscapeHtml(fmtChainTipAge(tip.age_seconds))}</td>`;
+            html += '</tr>';
+        }
+        html += '</tbody></table></div>';
+        return html;
+    }
+
+    function openChainTipsModal() {
+        const existing = document.getElementById('chain-tips-modal');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'chain-tips-modal';
+        overlay.innerHTML = '<div class="modal-box" style="width:calc(100vw - 32px);max-width:820px"><div class="modal-header"><span class="modal-title">Chain Tips</span><button class="modal-close" id="chain-tips-close">&times;</button></div><div class="modal-body" id="chain-tips-body"><div style="color:var(--text-muted);text-align:center;padding:16px">Loading...</div></div></div>';
+        document.body.appendChild(overlay);
+        document.getElementById('chain-tips-close').addEventListener('click', () => overlay.remove());
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+        fetch('/api/chain-tips').then(r => r.json()).then(data => {
+            const body = document.getElementById('chain-tips-body');
+            if (body) body.innerHTML = renderChainTipsModal(data);
+        }).catch(err => {
+            const body = document.getElementById('chain-tips-body');
+            if (body) body.innerHTML = `<div style="color:var(--err)">Error: ${chainTipEscapeHtml(err.message)}</div>`;
+        });
+    }
+
     /** Update BTC Price in left map overlay + ₿ symbol coloring */
     function updateBtcPricePanel(info) {
         const priceEl = document.getElementById('mo-btc-price');
@@ -8836,6 +8973,12 @@
         const geoipDbPeerButton = document.getElementById('btn-geoip-db-peer');
         if (geoipDbPeerButton) {
             geoipDbPeerButton.addEventListener('click', (e) => { e.stopPropagation(); openGeoDBDropdown(); });
+        }
+
+        // CHAIN-TIPS button in peer panel handle
+        const chainTipsButton = document.getElementById('btn-chain-tips');
+        if (chainTipsButton) {
+            chainTipsButton.addEventListener('click', (e) => { e.stopPropagation(); openChainTipsModal(); });
         }
 
         // Topbar gear icon → open primary Map Settings popup

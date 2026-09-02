@@ -177,6 +177,101 @@ class NodeService:
         except RpcError as exc:
             return {"success": False, "error": str(exc)}
 
+    def chain_tips(self) -> dict[str, Any]:
+        try:
+            tips = self.rpc.call("getchaintips", timeout=10)
+            if not isinstance(tips, list):
+                raise TypeError("getchaintips returned an unexpected response")
+
+            blockchain: dict[str, Any] = {}
+            try:
+                blockchain = self.rpc.call("getblockchaininfo", timeout=10)
+            except RpcError:
+                pass
+
+            generated_at = int(time.time())
+            normalized = []
+            counts_by_status: dict[str, int] = {}
+
+            for tip in tips:
+                if not isinstance(tip, dict):
+                    continue
+                status = str(tip.get("status") or "unknown")
+                counts_by_status[status] = counts_by_status.get(status, 0) + 1
+                block_hash = str(tip.get("hash") or "")
+                block_time = None
+                if block_hash:
+                    try:
+                        header = self.rpc.call("getblockheader", block_hash, timeout=10)
+                        block_time = int(header.get("time", 0) or 0)
+                    except (RpcError, TypeError, ValueError):
+                        block_time = None
+
+                height = int(tip.get("height", 0) or 0)
+                branch_length = int(tip.get("branchlen", 0) or 0)
+                normalized.append(
+                    {
+                        "height": height,
+                        "hash": block_hash,
+                        "branch_length": branch_length,
+                        "status": status,
+                        "status_label": status.replace("-", " ").title(),
+                        "time": block_time,
+                        "age_seconds": max(0, generated_at - block_time) if block_time else None,
+                        "is_active": status == "active",
+                    }
+                )
+
+            status_priority = {
+                "active": 0,
+                "valid-fork": 1,
+                "valid-headers": 2,
+                "headers-only": 3,
+                "invalid": 4,
+            }
+            normalized.sort(
+                key=lambda tip: (
+                    status_priority.get(tip["status"], 5),
+                    -tip["height"],
+                    -tip["branch_length"],
+                )
+            )
+
+            active_tip = next((tip for tip in normalized if tip["is_active"]), None)
+            non_active_tip = max(
+                (tip for tip in normalized if not tip["is_active"]),
+                key=lambda tip: tip["height"],
+                default=None,
+            )
+            fork_count = counts_by_status.get("valid-fork", 0)
+            headers_only_count = counts_by_status.get("headers-only", 0)
+            non_active_count = sum(1 for tip in normalized if not tip["is_active"])
+            summary = {
+                "chain": blockchain.get("chain"),
+                "best_height": blockchain.get("blocks")
+                if blockchain.get("blocks") is not None
+                else active_tip["height"]
+                if active_tip
+                else None,
+                "best_hash": blockchain.get("bestblockhash")
+                if blockchain.get("bestblockhash")
+                else active_tip["hash"]
+                if active_tip
+                else None,
+                "total": len(normalized),
+                "active_count": counts_by_status.get("active", 0),
+                "non_active_count": non_active_count,
+                "fork_count": fork_count,
+                "headers_only_count": headers_only_count,
+                "latest_non_active_height": non_active_tip["height"] if non_active_tip else None,
+                "latest_non_active_status": non_active_tip["status"] if non_active_tip else None,
+                "counts_by_status": counts_by_status,
+                "generated_at": generated_at,
+            }
+            return {"success": True, "summary": summary, "tips": normalized, "error": None}
+        except (RpcError, TypeError, ValueError) as exc:
+            return {"success": False, "summary": None, "tips": [], "error": str(exc)}
+
     async def connect(self, address: str) -> dict[str, Any]:
         try:
             normalized = normalize_peer_address(address)
