@@ -2,8 +2,8 @@ from typing import Any
 
 import pytest
 
-from bitcoin_peer_map.rpc import BitcoinRpcClient, RpcAuthenticationError, RpcError
-from bitcoin_peer_map.settings import AppSettings
+from rpc import BitcoinRpcClient, RpcAuthenticationError, RpcError
+from settings import AppSettings
 
 
 class Response:

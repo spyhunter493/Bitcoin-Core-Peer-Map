@@ -6,8 +6,9 @@ import asyncio
 import time
 from typing import Any, Callable
 
-from ..network import normalize_peer_address, split_peer_address
-from ..rpc import BitcoinRpcClient, RpcError
+from network import normalize_peer_address, split_peer_address
+from rpc import BitcoinRpcClient, RpcError
+
 from .connectivity import ConnectivityService
 from .geoip import GeoDatabase
 

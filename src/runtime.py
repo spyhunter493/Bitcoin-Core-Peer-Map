@@ -4,19 +4,18 @@ from __future__ import annotations
 
 import threading
 
-from .preferences import PreferenceStore
-from .rpc import BitcoinRpcClient
-from .services.connectivity import ConnectivityService
-from .services.geoip import GeoDatabase
-from .services.node import NodeService
-from .services.peers import PeerService
-from .services.system_metrics import SystemMetrics
-from .services.updates import UpdateService
-from .settings import AppSettings
+from preferences import PreferenceStore
+from rpc import BitcoinRpcClient
+from services.connectivity import ConnectivityService
+from services.geoip import GeoDatabase
+from services.node import NodeService
+from services.peers import PeerService
+from services.system_metrics import SystemMetrics
+from settings import AppSettings
 
 
 class AppRuntime:
-    def __init__(self, settings: AppSettings, version: str):
+    def __init__(self, settings: AppSettings):
         self.settings = settings
         self.stop_event = threading.Event()
         self.preferences_store = PreferenceStore(settings.data_dir / "settings.json")
@@ -40,7 +39,6 @@ class AppRuntime:
             self.geo_database,
             lambda: self.preferences.geoip_auto_update,
         )
-        self.updates = UpdateService(settings.github_repository, version)
         self._geoip_update_thread: threading.Thread | None = None
 
     def start(self) -> None:

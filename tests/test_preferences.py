@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from bitcoin_peer_map.preferences import Preferences, PreferenceStore
+from preferences import Preferences, PreferenceStore
 
 
 def test_preferences_round_trip_as_json(tmp_path: Path) -> None:

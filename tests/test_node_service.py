@@ -1,6 +1,6 @@
 from typing import Any
 
-from bitcoin_peer_map.services.node import NodeService
+from services.node import NodeService
 
 
 class Rpc:

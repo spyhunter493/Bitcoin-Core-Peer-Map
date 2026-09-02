@@ -19,19 +19,19 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: requirements*.txt
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
       - name: Install test dependencies
-        run: pip install --editable ".[test]"
+        run: pip install --requirement requirements-test.txt
       - name: Check Python
         run: |
           python -m compileall -q src tests
           ruff format --check src tests
           ruff check src tests
       - name: Check JavaScript
-        run: node --check src/bitcoin_peer_map/static/js/app.js && node --check src/bitcoin_peer_map/static/js/as-diversity.js && node --check tests/test_as_diversity.js
+        run: node --check src/static/js/app.js && node --check src/static/js/as-diversity.js && node --check tests/test_as_diversity.js
       - name: Run Python tests
         run: python -m pytest -q
       - name: Run JavaScript tests
@@ -42,4 +42,4 @@ jobs:
           BITCOIN_RPC_PASSWORD: test
         run: |
           docker compose config --quiet
-          docker build --tag bitcoin-peer-map:test .
+          docker build --build-arg BPM_BUILD_REVISION="${GITHUB_SHA}" --tag bitcoin-peer-map:test .

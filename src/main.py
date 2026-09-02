@@ -7,11 +7,10 @@ import time
 
 import uvicorn
 
-from . import __version__
-from .app import create_app
-from .rpc import RpcAuthenticationError, RpcError
-from .runtime import AppRuntime
-from .settings import AppSettings, ConfigurationError
+from app import create_app
+from rpc import RpcAuthenticationError, RpcError
+from runtime import AppRuntime
+from settings import AppSettings, ConfigurationError
 
 
 def _wait_for_rpc(runtime: AppRuntime) -> None:
@@ -44,7 +43,7 @@ def _wait_for_rpc(runtime: AppRuntime) -> None:
 def main() -> None:
     try:
         settings = AppSettings.from_env()
-        runtime = AppRuntime(settings, __version__)
+        runtime = AppRuntime(settings)
         _wait_for_rpc(runtime)
     except (ConfigurationError, RpcError) as exc:
         print(f"Bitcoin Peer Map: startup failed: {exc}", file=sys.stderr)

@@ -1,6 +1,6 @@
 import pytest
 
-from bitcoin_peer_map.network import (
+from network import (
     format_duration,
     is_private_address,
     network_type,

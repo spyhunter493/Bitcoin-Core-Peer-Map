@@ -9,7 +9,7 @@ from typing import Any
 
 import requests
 
-from .settings import AppSettings
+from settings import AppSettings
 
 
 class RpcError(RuntimeError):

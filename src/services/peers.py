@@ -9,7 +9,7 @@ from typing import Any
 
 import requests
 
-from ..network import (
+from network import (
     abbreviate_connection_type,
     format_bytes,
     format_duration,
@@ -18,7 +18,8 @@ from ..network import (
     network_type,
     split_peer_address,
 )
-from ..rpc import BitcoinRpcClient, RpcError
+from rpc import BitcoinRpcClient, RpcError
+
 from .connectivity import ConnectivityService
 from .geoip import GeoDatabase, is_valid_geo_data
 

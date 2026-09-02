@@ -4,6 +4,8 @@ services:
   bpm:
     build:
       context: .
+      args:
+        BPM_BUILD_REVISION: ${BPM_BUILD_REVISION:-unknown}
     image: bitcoin-peer-map:local
     restart: unless-stopped
     init: true
@@ -18,6 +20,7 @@ services:
       BITCOIN_RPC_PORT: ${BITCOIN_RPC_PORT:-8332}
       BITCOIN_RPC_USER: ${BITCOIN_RPC_USER}
       BITCOIN_RPC_PASSWORD: ${BITCOIN_RPC_PASSWORD}
+      BITCOIN_RPC_PASSWORD_FILE: ${BITCOIN_RPC_PASSWORD_FILE:-}
       BITCOIN_RPC_VERIFY_TLS: ${BITCOIN_RPC_VERIFY_TLS:-true}
       BITCOIN_RPC_TIMEOUT: ${BITCOIN_RPC_TIMEOUT:-30}
       BITCOIN_NETWORK: ${BITCOIN_NETWORK:-main}

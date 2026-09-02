@@ -23,7 +23,7 @@ cp .env.example .env
 Edit `.env` with the node's RPC address and credentials, then start the application:
 
 ```bash
-docker compose up -d --build
+BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose up -d --build
 docker compose logs -f bpm
 ```
 
@@ -117,6 +117,16 @@ The named volume is mounted at `/var/lib/bitcoin-peer-map` and contains only mut
 
 RPC credentials are never written to the volume. Browser display preferences remain in browser local storage under `bpm.*` keys.
 
+## Build Revision
+
+The header displays the first 12 characters of the Git commit embedded in the image and links to that exact commit on GitHub. Pass the full commit SHA whenever the image is built:
+
+```bash
+BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose build
+```
+
+GitHub Actions passes `GITHUB_SHA` directly to the Docker build. Images built without `BPM_BUILD_REVISION` display `unknown` rather than an inaccurate revision.
+
 ## Container Security
 
 The example deployment:
@@ -134,7 +144,7 @@ Rebuild and recreate after pulling changes:
 
 ```bash
 git pull
-docker compose up -d --build
+BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose up -d --build
 ```
 
 Inspect status and health:
@@ -154,19 +164,20 @@ docker compose logs -f --tail=100 bpm
 
 ```text
 bitcoin-peer-map/
-├── src/bitcoin_peer_map/
+├── src/
 │   ├── api/                 # FastAPI routers grouped by domain
-│   ├── services/            # Peer, node, GeoIP, metrics, and update services
+│   ├── services/            # Peer, node, GeoIP, connectivity, and metric services
 │   ├── static/              # Browser JavaScript, CSS, and map assets
 │   ├── templates/           # Jinja templates
 │   ├── app.py               # FastAPI application factory and lifespan
 │   ├── runtime.py           # Service composition and worker lifecycle
 │   ├── settings.py          # Typed environment configuration
 │   ├── rpc.py               # Direct Bitcoin JSON-RPC client
-│   └── __main__.py          # Container process entrypoint
+│   └── main.py              # Container process entrypoint
 ├── tests/                   # Python and JavaScript tests
 ├── Dockerfile
 ├── compose.yaml
+├── requirements.txt
 └── pyproject.toml
 ```
 
@@ -174,22 +185,22 @@ The application uses FastAPI lifespan hooks to start and stop peer polling, GeoI
 
 ## Development and Tests
 
-The production image installs the package directly into the container's Python installation. A virtualenv inside the image would duplicate isolation already provided by the container and is intentionally not used.
+The production image installs dependencies directly into the container's Python installation and runs `src/main.py`. A virtualenv inside the image would duplicate isolation already provided by the container and is intentionally not used.
 
 Run the same Python checks used by CI without installing Python dependencies or generated
 package metadata on the host:
 
 ```bash
 docker run --rm -v "$PWD:/source:ro" python:3.12-slim \
-  sh -c 'cp -a /source /app && cd /app && pip install ".[test]" && \
+  sh -c 'cp -a /source /app && cd /app && pip install -r requirements-test.txt && \
   ruff format --check src tests && ruff check src tests && pytest -q'
 ```
 
 Run the JavaScript checks:
 
 ```bash
-node --check src/bitcoin_peer_map/static/js/app.js
-node --check src/bitcoin_peer_map/static/js/as-diversity.js
+node --check src/static/js/app.js
+node --check src/static/js/as-diversity.js
 node tests/test_as_diversity.js
 ```
 
@@ -198,11 +209,12 @@ Validate the deployment definition and image:
 ```bash
 BITCOIN_RPC_USER=test BITCOIN_RPC_PASSWORD=test \
   docker compose config --quiet
-docker build -t bitcoin-peer-map:test .
+docker build --build-arg BPM_BUILD_REVISION="$(git rev-parse HEAD)" \
+  -t bitcoin-peer-map:test .
 ```
 
 ## License
 
 MIT License. See [LICENSE](LICENSE).
 
-Originally created by [mbhillrn](https://github.com/mbhillrn).
+inspired by [mbhillrn](https://github.com/mbhillrn).

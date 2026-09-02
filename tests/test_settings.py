@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from bitcoin_peer_map.settings import AppSettings, ConfigurationError
+from settings import AppSettings, ConfigurationError
 
 
 def valid_environment() -> dict[str, str]:
@@ -20,6 +20,14 @@ def test_settings_load_valid_environment() -> None:
     assert settings.listen_port == 58333
     assert settings.geoip_enabled is True
     assert settings.geoip_auto_update_override is None
+    assert settings.build_revision == "unknown"
+
+
+def test_settings_load_build_revision() -> None:
+    environment = valid_environment()
+    environment["BPM_BUILD_REVISION"] = "ABCDEF0123456789"
+
+    assert AppSettings.from_env(environment).build_revision == "abcdef0123456789"
 
 
 def test_settings_support_password_file(tmp_path: Path) -> None:
@@ -40,6 +48,7 @@ def test_settings_support_password_file(tmp_path: Path) -> None:
         ("BITCOIN_RPC_SCHEME", "ftp", "must be http or https"),
         ("BPM_GEOIP_ENABLED", "yes", "must be true or false"),
         ("BPM_LISTEN_PORT", "80", "must be between 1024"),
+        ("BPM_BUILD_REVISION", "not-a-commit", "must be a 7-40 character"),
     ],
 )
 def test_settings_reject_invalid_values(key: str, value: str, message: str) -> None:

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from ..runtime import AppRuntime
+from runtime import AppRuntime
+
 from .dependencies import runtime_from
 
 router = APIRouter(prefix="/api")

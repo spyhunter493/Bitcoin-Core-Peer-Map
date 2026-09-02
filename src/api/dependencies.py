@@ -2,7 +2,7 @@
 
 from fastapi import Request
 
-from ..runtime import AppRuntime
+from runtime import AppRuntime
 
 
 def runtime_from(request: Request) -> AppRuntime:

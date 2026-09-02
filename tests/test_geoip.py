@@ -2,7 +2,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-from bitcoin_peer_map.services.geoip import GEO_COLUMNS, GeoDatabase, is_valid_geo_data
+from services.geoip import GEO_COLUMNS, GeoDatabase, is_valid_geo_data
 
 
 class StreamingResponse:

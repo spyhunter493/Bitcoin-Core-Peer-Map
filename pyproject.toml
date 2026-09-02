@@ -1,47 +1,6 @@
-[build-system]
-requires = ["setuptools>=77"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "bitcoin-peer-map"
-dynamic = ["version"]
-description = "Docker-first Bitcoin peer monitoring and management dashboard"
-readme = "README.md"
-requires-python = ">=3.12"
-license = "MIT"
-dependencies = [
-    "fastapi>=0.115,<1",
-    "jinja2>=3.1,<4",
-    "requests>=2.32,<3",
-    "sse-starlette>=2.2,<4",
-    "uvicorn>=0.34,<1",
-]
-
-[project.optional-dependencies]
-test = [
-    "httpx2>=2.12,<3",
-    "pytest>=8.3,<9",
-    "ruff>=0.12,<1",
-]
-
-[project.scripts]
-bitcoin-peer-map = "bitcoin_peer_map.__main__:main"
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-include-package-data = true
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-bitcoin_peer_map = ["templates/*.html", "static/**/*"]
-
-[tool.setuptools.dynamic]
-version = {file = ["VERSION"]}
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.ruff]
 target-version = "py312"

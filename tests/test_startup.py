@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from bitcoin_peer_map.__main__ import _wait_for_rpc
-from bitcoin_peer_map.settings import AppSettings, ConfigurationError
+from main import _wait_for_rpc
+from settings import AppSettings, ConfigurationError
 
 
 class Rpc:

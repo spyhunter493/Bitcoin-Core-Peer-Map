@@ -3893,87 +3893,12 @@
     let _prevInternetState = 'green';
     let _lastRestoredToastTime = 0;
 
-    // ── System update checker — polls /api/update-check every 55 minutes ──
-    const UPDATE_CHECK_INTERVAL = 55 * 60 * 1000; // 55 minutes
-    const updateBadge = document.getElementById('update-badge');
-
-    let _updateModalShown = false; // only show popup once per session
-
-    async function checkForUpdate() {
-        if (!updateBadge) return;
-        try {
-            const resp = await fetch('/api/update-check');
-            if (!resp.ok) return;
-            const data = await resp.json();
-            if (data.available) {
-                // Top bar: short bright label, hover tooltip keeps full details
-                updateBadge.style.display = '';
-                let tip = '<div class="update-tooltip">';
-                tip += '<div class="update-tooltip-title">v' + data.current + ' \u2192 v' + data.latest + '</div>';
-                if (data.changes) {
-                    tip += '<div class="update-tooltip-changes">' + data.changes.replace(/\n/g, '<br>') + '</div>';
-                }
-                tip += '<div class="update-tooltip-restart">To update: rebuild the image and recreate the container with <b>docker compose up -d --build</b>.</div>';
-                tip += '</div>';
-                updateBadge.innerHTML = 'SYS UPDATE AVAILABLE!' + tip;
-
-                // Center-screen popup (once per session)
-                if (!_updateModalShown) {
-                    _updateModalShown = true;
-                    showUpdateModal(data);
-                }
-            } else {
-                updateBadge.style.display = 'none';
-                updateBadge.innerHTML = '';
-            }
-        } catch (e) {
-            // silently ignore network errors
-        }
-    }
-
-    function showUpdateModal(data) {
-        if (document.getElementById('sys-update-modal')) return;
-        const overlay = document.createElement('div');
-        overlay.className = 'modal-overlay';
-        overlay.id = 'sys-update-modal';
-        let changesHtml = '';
-        if (data.changes) {
-            changesHtml = '<div class="update-modal-changes">' +
-                '<div class="update-modal-changes-title">What\'s New</div>' +
-                data.changes.replace(/\n/g, '<br>') +
-                '</div>';
-        }
-        overlay.innerHTML =
-            '<div class="update-modal-box">' +
-                '<div class="update-modal-header">' +
-                    '<span class="update-modal-title">System Update Available</span>' +
-                    '<button class="modal-close" id="update-modal-close">&times;</button>' +
-                '</div>' +
-                '<div class="update-modal-body">' +
-                    '<div class="update-modal-version">v' + data.current + ' &rarr; <span>v' + data.latest + '</span></div>' +
-                    '<div class="update-modal-instructions">' +
-                        'A new version is available. To upgrade:' +
-                    '</div>' +
-                    '<div class="update-modal-step"><span class="update-modal-step-num">1.</span> Pull the latest repository changes</div>' +
-                    '<div class="update-modal-step"><span class="update-modal-step-num">2.</span> Run <b>docker compose up -d --build</b></div>' +
-                    changesHtml +
-                    '<button class="update-modal-dismiss" id="update-modal-dismiss">Got It</button>' +
-                '</div>' +
-            '</div>';
-        document.body.appendChild(overlay);
-        document.getElementById('update-modal-close').addEventListener('click', () => overlay.remove());
-        document.getElementById('update-modal-dismiss').addEventListener('click', () => overlay.remove());
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-    }
-
     // ── DB auto-update — once per hour while map is open ──
     const DB_AUTO_UPDATE_INTERVAL = 60 * 60 * 1000; // 1 hour
     let dbAutoUpdateTimer = null;
     const dbStatusEl = document.getElementById('db-update-status');
 
-    /** Show a temporary message in the top bar DB status area.
-     *  Intentionally overlaps the update-badge area — this is by design since
-     *  the DB status is temporary (~3s) and the update badge is persistent. */
+    /** Show a temporary message in the top bar DB status area. */
     function showDbStatus(text, cls) {
         if (!dbStatusEl) return;
         dbStatusEl.textContent = text;
@@ -8640,10 +8565,6 @@
         // Once the first fetch resolves, start the DB auto-update timer if enabled.
         fetchInfo().then(() => syncDbAutoUpdateTimer());
         btcPriceTimer = setInterval(fetchInfo, CFG.infoPollInterval);
-
-        // Check for system updates on startup and every 55 minutes
-        checkForUpdate();
-        setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL);
 
         // System stats + NET speed: real-time SSE stream (dual-EMA smoothed, ~250ms updates)
         connectSystemStream();

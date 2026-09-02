@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -49,6 +50,15 @@ def _optional_boolean(env: Mapping[str, str], name: str) -> bool | None:
     return _boolean(env, name, False)
 
 
+def _build_revision(env: Mapping[str, str]) -> str:
+    revision = env.get("BPM_BUILD_REVISION", "unknown").strip().lower()
+    if revision == "unknown":
+        return revision
+    if not re.fullmatch(r"[0-9a-f]{7,40}", revision):
+        raise ConfigurationError("BPM_BUILD_REVISION must be a 7-40 character Git commit SHA")
+    return revision
+
+
 def _rpc_password(env: Mapping[str, str]) -> str:
     direct = env.get("BITCOIN_RPC_PASSWORD", "")
     password_file = env.get("BITCOIN_RPC_PASSWORD_FILE", "").strip()
@@ -90,6 +100,7 @@ class AppSettings:
     geoip_enabled: bool
     geoip_auto_update_override: bool | None
     github_repository: str
+    build_revision: str
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "AppSettings":
@@ -130,6 +141,7 @@ class AppSettings:
             geoip_enabled=_boolean(values, "BPM_GEOIP_ENABLED", True),
             geoip_auto_update_override=_optional_boolean(values, "BPM_GEOIP_AUTO_UPDATE"),
             github_repository=repository,
+            build_revision=_build_revision(values),
         )
 
     @property

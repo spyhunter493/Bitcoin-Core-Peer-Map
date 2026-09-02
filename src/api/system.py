@@ -1,4 +1,4 @@
-"""Container metrics, health, and update endpoints."""
+"""Container metrics, health, and event-stream endpoints."""
 
 from __future__ import annotations
 
@@ -8,7 +8,8 @@ import json
 from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse
 
-from ..runtime import AppRuntime
+from runtime import AppRuntime
+
 from .dependencies import runtime_from
 
 router = APIRouter()
@@ -37,8 +38,3 @@ async def system_stream(request: Request, runtime: AppRuntime = Depends(runtime_
             await asyncio.sleep(0.5)
 
     return EventSourceResponse(generate())
-
-
-@router.get("/api/update-check")
-def update_check(runtime: AppRuntime = Depends(runtime_from)):
-    return runtime.updates.check()

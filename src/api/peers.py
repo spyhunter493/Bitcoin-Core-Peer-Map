@@ -3,7 +3,8 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from ..runtime import AppRuntime
+from runtime import AppRuntime
+
 from .dependencies import runtime_from
 
 router = APIRouter(prefix="/api")

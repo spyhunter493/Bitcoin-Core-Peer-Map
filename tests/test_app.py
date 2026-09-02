@@ -3,8 +3,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
-from bitcoin_peer_map.app import create_app
-from bitcoin_peer_map.settings import AppSettings
+from app import create_app
+from settings import AppSettings
 
 
 class FakeRuntime:
@@ -32,6 +32,7 @@ def settings(tmp_path: Path) -> AppSettings:
             "BITCOIN_RPC_USER": "bpm",
             "BITCOIN_RPC_PASSWORD": "secret",
             "BPM_DATA_DIR": str(tmp_path),
+            "BPM_BUILD_REVISION": "abcdef0123456789abcdef0123456789abcdef01",
         }
     )
 
@@ -44,9 +45,18 @@ def test_application_factory_serves_health_dashboard_and_assets(tmp_path: Path) 
         assert runtime.started is True
         assert client.get("/healthz").json() == {"status": "ok"}
         assert client.get("/api/stats").json() == {"system_stats": {"cpu_pct": 12.5}}
-        assert "Bitcoin Peer Map" in client.get("/").text
+        dashboard = client.get("/")
+        assert "Bitcoin Peer Map" in dashboard.text
+        assert "abcdef012345" in dashboard.text
+        assert (
+            "https://github.com/spyhunter493/bitcoin-peer-map/commit/"
+            "abcdef0123456789abcdef0123456789abcdef01" in dashboard.text
+        )
+        assert "bc1qnngus06lk0e60e05yq902e9edx7kt4kcuuuy72" in dashboard.text
+        assert "Created by" not in dashboard.text
         assert client.get("/static/js/app.js").status_code == 200
         assert client.get("/api/changes").status_code == 404
         assert client.get("/api/netspeed").status_code == 404
+        assert client.get("/api/update-check").status_code == 404
 
     assert runtime.stopped is True
