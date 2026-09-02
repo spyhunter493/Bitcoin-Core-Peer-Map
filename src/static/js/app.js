@@ -28,6 +28,17 @@
     });
     const repositoryUrl = document.body.dataset.repositoryUrl;
     const repositoryDiscussionsUrl = `${repositoryUrl}/discussions`;
+    const assetRevision = document.body.dataset.assetRevision;
+
+    function staticAssetUrl(filename) {
+        return `/static/assets/${filename}?v=${encodeURIComponent(assetRevision)}`;
+    }
+
+    async function fetchStaticJson(filename) {
+        const response = await fetch(staticAssetUrl(filename));
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+    }
 
     // ═══════════════════════════════════════════════════════════
     // CONFIGURATION
@@ -172,7 +183,7 @@
                 '--logo-primary':   '#2b5ea0',
                 '--logo-accent':    '#1a7a9e',
                 '--peer-panel-bg':  'rgba(255, 255, 255, 0.95)',
-                '--peer-panel-blur': 'blur(8px)',
+                '--peer-panel-blur': 'none',
             },
             advOverrides: {
                 landHue:     120,
@@ -516,6 +527,8 @@
         // Ice (constant cool gray)
         advColors.iceFill   = 'hsl(210, 15%, 82%)';
         advColors.iceStroke = 'hsl(210, 12%, 65%)';
+
+        markBasemapDirty();
     }
 
     /** Toggle solid backgrounds on HUD overlays (map-overlay, flight-deck, btc-price-bar, right-overlay) */
@@ -640,9 +653,30 @@
     // CANVAS & VIEW STATE
     // ═══════════════════════════════════════════════════════════
 
+    const basemapCanvas = document.getElementById('basemap');
+    const baseCtx = basemapCanvas.getContext('2d', { alpha: false });
     const canvas = document.getElementById('worldmap');
     const ctx = canvas.getContext('2d');
     let W, H;  // canvas logical dimensions (CSS pixels)
+    const BASEMAP_DPR_CAP = 1.5;
+    const INTERACTION_DPR_CAP = 1;
+    let basemapDpr = 1;
+    let peerDpr = 1;
+
+    // Static geography is projected into reusable viewport-space paths.
+    // The cached basemap bitmap is transformed while the camera is moving,
+    // then redrawn once at the settled view for sharp output.
+    const basemapPaths = {
+        grid: null,
+        land: null,
+        polar: null,
+        lakes: null,
+        borders: null,
+        states: null,
+    };
+    let basemapView = null;
+    let basemapDirty = true;
+    let lastBasemapTransform = '';
 
     // Current view (smoothly interpolated each frame)
     let view = { x: 0, y: 0, zoom: 1 };
@@ -729,6 +763,9 @@
     let citiesReady = false;
     let countryLabelsReady = false;
     let stateLabelsReady = false;
+    let stateGeometryPromise = null;
+    let stateLabelsPromise = null;
+    let cityDataPromise = null;
 
     // Zoom thresholds for progressive detail layers
     // Country borders render at ALL zoom levels (no threshold)
@@ -740,6 +777,9 @@
     const ZOOM_SHOW_CITIES_LARGE   = 8.0;  // cities > 1M population
     const ZOOM_SHOW_CITIES_MED     = 10.0; // cities > 300K population
     const ZOOM_SHOW_CITIES_ALL     = 12.0; // all cities
+    const ZOOM_PREFETCH_STATES       = ZOOM_SHOW_STATES - 0.5;
+    const ZOOM_PREFETCH_STATE_LABELS = ZOOM_SHOW_STATE_LABELS - 0.5;
+    const ZOOM_PREFETCH_CITIES       = ZOOM_SHOW_CITIES_MAJOR - 0.5;
 
     // DOM references
     const clockEl = document.getElementById('clock');
@@ -3593,15 +3633,15 @@
 
     async function loadWorldGeometry() {
         try {
-            const resp = await fetch('/static/assets/world-50m.json');
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const polygons = await resp.json();
+            const polygons = await fetchStaticJson('world-50m.json');
 
             // Convert to our internal format: each entry is { rings: [[[lon,lat],...], ...] }
             // The first ring is the outer boundary, subsequent rings are holes (lakes etc)
             worldPolygons = polygons;
             worldReady = true;
             classifyPolarPolygons();
+            rebuildWorldPaths();
+            markBasemapDirty();
             console.log(`[Bitcoin Peer Map] Loaded ${polygons.length} land polygons (${polarPolygons.length} polar)`);
         } catch (err) {
             console.error('[Bitcoin Peer Map] Failed to load world geometry, using fallback:', err);
@@ -3616,6 +3656,8 @@
             ];
             worldReady = true;
             classifyPolarPolygons();
+            rebuildWorldPaths();
+            markBasemapDirty();
         }
     }
 
@@ -3628,10 +3670,10 @@
 
     async function loadLakeGeometry() {
         try {
-            const resp = await fetch('/static/assets/lakes-50m.json');
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            lakePolygons = await resp.json();
+            lakePolygons = await fetchStaticJson('lakes-50m.json');
             lakesReady = true;
+            rebuildLakePath();
+            markBasemapDirty();
             console.log(`[Bitcoin Peer Map] Loaded ${lakePolygons.length} lake polygons`);
         } catch (err) {
             // Lakes are non-critical — map still works without them
@@ -3646,10 +3688,10 @@
 
     async function loadBorderGeometry() {
         try {
-            const resp = await fetch('/static/assets/borders-50m.json');
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            borderLines = await resp.json();
+            borderLines = await fetchStaticJson('borders-50m.json');
             bordersReady = true;
+            rebuildBorderPath();
+            markBasemapDirty();
             console.log(`[Bitcoin Peer Map] Loaded ${borderLines.length} country border lines`);
         } catch (err) {
             console.warn('[Bitcoin Peer Map] Failed to load country borders:', err);
@@ -3662,15 +3704,20 @@
     // ═══════════════════════════════════════════════════════════
 
     async function loadStateGeometry() {
-        try {
-            const resp = await fetch('/static/assets/states-50m.json');
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            stateLines = await resp.json();
-            statesReady = true;
-            console.log(`[Bitcoin Peer Map] Loaded ${stateLines.length} state/province border lines`);
-        } catch (err) {
-            console.warn('[Bitcoin Peer Map] Failed to load state borders:', err);
+        if (!stateGeometryPromise) {
+            stateGeometryPromise = (async () => {
+                try {
+                    stateLines = await fetchStaticJson('states-50m.json');
+                    statesReady = true;
+                    rebuildStatePath();
+                    markBasemapDirty();
+                    console.log(`[Bitcoin Peer Map] Loaded ${stateLines.length} state/province border lines`);
+                } catch (err) {
+                    console.warn('[Bitcoin Peer Map] Failed to load state borders:', err);
+                }
+            })();
         }
+        return stateGeometryPromise;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -3679,15 +3726,20 @@
     // ═══════════════════════════════════════════════════════════
 
     async function loadCityData() {
-        try {
-            const resp = await fetch('/static/assets/cities-50m.json');
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            cityPoints = await resp.json();
-            citiesReady = true;
-            console.log(`[Bitcoin Peer Map] Loaded ${cityPoints.length} cities`);
-        } catch (err) {
-            console.warn('[Bitcoin Peer Map] Failed to load city data:', err);
+        if (!cityDataPromise) {
+            cityDataPromise = (async () => {
+                try {
+                    cityPoints = await fetchStaticJson('cities-50m.json');
+                    citiesReady = true;
+                    projectBasemapPoints(cityPoints);
+                    markBasemapDirty();
+                    console.log(`[Bitcoin Peer Map] Loaded ${cityPoints.length} cities`);
+                } catch (err) {
+                    console.warn('[Bitcoin Peer Map] Failed to load city data:', err);
+                }
+            })();
         }
+        return cityDataPromise;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -3697,10 +3749,10 @@
 
     async function loadCountryLabels() {
         try {
-            const resp = await fetch('/static/assets/country-labels-50m.json');
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            countryLabels = await resp.json();
+            countryLabels = await fetchStaticJson('country-labels-50m.json');
             countryLabelsReady = true;
+            projectBasemapPoints(countryLabels);
+            markBasemapDirty();
             console.log(`[Bitcoin Peer Map] Loaded ${countryLabels.length} country labels`);
         } catch (err) {
             console.warn('[Bitcoin Peer Map] Failed to load country labels:', err);
@@ -3713,15 +3765,26 @@
     // ═══════════════════════════════════════════════════════════
 
     async function loadStateLabels() {
-        try {
-            const resp = await fetch('/static/assets/state-labels-50m.json');
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            stateLabels = await resp.json();
-            stateLabelsReady = true;
-            console.log(`[Bitcoin Peer Map] Loaded ${stateLabels.length} state/province labels`);
-        } catch (err) {
-            console.warn('[Bitcoin Peer Map] Failed to load state labels:', err);
+        if (!stateLabelsPromise) {
+            stateLabelsPromise = (async () => {
+                try {
+                    stateLabels = await fetchStaticJson('state-labels-50m.json');
+                    stateLabelsReady = true;
+                    projectBasemapPoints(stateLabels);
+                    markBasemapDirty();
+                    console.log(`[Bitcoin Peer Map] Loaded ${stateLabels.length} state/province labels`);
+                } catch (err) {
+                    console.warn('[Bitcoin Peer Map] Failed to load state labels:', err);
+                }
+            })();
         }
+        return stateLabelsPromise;
+    }
+
+    function ensureZoomDetailLoaded(zoom) {
+        if (zoom >= ZOOM_PREFETCH_STATES) loadStateGeometry();
+        if (zoom >= ZOOM_PREFETCH_STATE_LABELS) loadStateLabels();
+        if (zoom >= ZOOM_PREFETCH_CITIES) loadCityData();
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -3748,6 +3811,11 @@
             const currentIds = new Set();
             for (const p of peers) currentIds.add(p.id);
 
+            const aliveNodesByPeerId = new Map();
+            for (const node of nodes) {
+                if (node.alive) aliveNodesByPeerId.set(node.peerId, node);
+            }
+
             // ── Mark departed peers for fade-out ──
             // If a node was alive and is no longer in the response, start its fade-out
             for (const node of nodes) {
@@ -3759,7 +3827,7 @@
 
             // ── Add or update existing peers ──
             for (const peer of peers) {
-                const existing = nodes.find(n => n.peerId === peer.id && n.alive);
+                const existing = aliveNodesByPeerId.get(peer.id);
 
                 // Determine map coordinates
                 let lat, lon;
@@ -3806,7 +3874,7 @@
                     existing.location_status = peer.location_status;
                 } else {
                     // ── New peer — create node with spawn animation ──
-                    nodes.push({
+                    const newNode = {
                         peerId: peer.id,
                         lat,
                         lon,
@@ -3833,7 +3901,9 @@
                         spawnTime: now,                       // triggers fade-in animation
                         alive: true,
                         fadeOutStart: null,
-                    });
+                    };
+                    nodes.push(newNode);
+                    aliveNodesByPeerId.set(peer.id, newNode);
                 }
             }
 
@@ -3850,6 +3920,7 @@
 
             // Update flight deck network counts
             updateFlightDeck(nodes);
+            updateHUD();
 
             // [AS-DIVERSITY] Update AS Diversity donut with latest peer data (always active)
             if (window.ASDiversity) {
@@ -3990,6 +4061,8 @@
                 fdCachedScores.ipv4 = info.network_scores.ipv4;
                 fdCachedScores.ipv6 = info.network_scores.ipv6;
             }
+
+            updateHUD();
 
         } catch (err) {
             console.error('[Bitcoin Peer Map] Failed to fetch info:', err);
@@ -4347,15 +4420,140 @@
     // Handles high-DPI displays via devicePixelRatio scaling.
     // ═══════════════════════════════════════════════════════════
 
+    function sizeCanvas(targetCanvas, targetCtx, dpr) {
+        const pixelWidth = Math.max(1, Math.round(W * dpr));
+        const pixelHeight = Math.max(1, Math.round(H * dpr));
+        if (targetCanvas.width !== pixelWidth || targetCanvas.height !== pixelHeight) {
+            targetCanvas.width = pixelWidth;
+            targetCanvas.height = pixelHeight;
+        }
+        targetCanvas.style.width = W + 'px';
+        targetCanvas.style.height = H + 'px';
+        targetCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function resizePeerLayer(interacting) {
+        const nativeDpr = window.devicePixelRatio || 1;
+        const nextDpr = Math.min(nativeDpr, interacting ? INTERACTION_DPR_CAP : BASEMAP_DPR_CAP);
+        if (nextDpr === peerDpr && canvas.width && canvas.height) return;
+        peerDpr = nextDpr;
+        sizeCanvas(canvas, ctx, peerDpr);
+    }
+
     function resize() {
-        const dpr = window.devicePixelRatio || 1;
         W = window.innerWidth;
         H = window.innerHeight;
-        canvas.width = W * dpr;
-        canvas.height = H * dpr;
-        canvas.style.width = W + 'px';
-        canvas.style.height = H + 'px';
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        basemapDpr = Math.min(window.devicePixelRatio || 1, BASEMAP_DPR_CAP);
+        const peerCap = document.body.classList.contains('map-interacting') ? INTERACTION_DPR_CAP : BASEMAP_DPR_CAP;
+        peerDpr = Math.min(window.devicePixelRatio || 1, peerCap);
+        sizeCanvas(basemapCanvas, baseCtx, basemapDpr);
+        sizeCanvas(canvas, ctx, peerDpr);
+        rebuildBasemapPaths();
+        basemapView = null;
+        basemapCanvas.style.transform = 'none';
+        lastBasemapTransform = 'none';
+        markBasemapDirty();
+    }
+
+    function setMapInteraction(active) {
+        document.body.classList.toggle('map-interacting', active);
+        resizePeerLayer(active);
+        if (!active && !basemapMatchesView()) markBasemapDirty();
+    }
+
+    function markBasemapDirty() {
+        basemapDirty = true;
+    }
+
+    function basePoint(lon, lat) {
+        const p = project(lon, lat);
+        return { x: (p.x - 0.5) * W, y: (p.y - 0.5) * H };
+    }
+
+    function projectBasemapPoints(points) {
+        if (!W || !H) return;
+        for (const point of points) {
+            const p = basePoint(point.c[0], point.c[1]);
+            point.mapX = p.x;
+            point.mapY = p.y;
+        }
+    }
+
+    function buildPolygonPath(polygons) {
+        if (!W || !H || polygons.length === 0) return null;
+        const path = new Path2D();
+        for (const polygon of polygons) {
+            for (const ring of polygon) {
+                for (let i = 0; i < ring.length; i++) {
+                    const p = basePoint(ring[i][0], ring[i][1]);
+                    if (i === 0) path.moveTo(p.x, p.y);
+                    else path.lineTo(p.x, p.y);
+                }
+                path.closePath();
+            }
+        }
+        return path;
+    }
+
+    function buildLinePath(lines) {
+        if (!W || !H || lines.length === 0) return null;
+        const path = new Path2D();
+        for (const line of lines) {
+            for (let i = 0; i < line.length; i++) {
+                const p = basePoint(line[i][0], line[i][1]);
+                if (i === 0) path.moveTo(p.x, p.y);
+                else path.lineTo(p.x, p.y);
+            }
+        }
+        return path;
+    }
+
+    function rebuildGridPath() {
+        if (!W || !H) return;
+        const path = new Path2D();
+        for (let lon = -180; lon <= 180; lon += CFG.gridSpacing) {
+            for (let lat = -85; lat <= 85; lat += 2) {
+                const p = basePoint(lon, lat);
+                if (lat === -85) path.moveTo(p.x, p.y);
+                else path.lineTo(p.x, p.y);
+            }
+        }
+        for (let lat = -60; lat <= 80; lat += CFG.gridSpacing) {
+            for (let lon = -180; lon <= 180; lon += 2) {
+                const p = basePoint(lon, lat);
+                if (lon === -180) path.moveTo(p.x, p.y);
+                else path.lineTo(p.x, p.y);
+            }
+        }
+        basemapPaths.grid = path;
+    }
+
+    function rebuildWorldPaths() {
+        basemapPaths.land = buildPolygonPath(worldPolygons);
+        basemapPaths.polar = buildPolygonPath(polarPolygons);
+    }
+
+    function rebuildLakePath() {
+        basemapPaths.lakes = buildPolygonPath(lakePolygons);
+    }
+
+    function rebuildBorderPath() {
+        basemapPaths.borders = buildLinePath(borderLines);
+    }
+
+    function rebuildStatePath() {
+        basemapPaths.states = buildLinePath(stateLines);
+    }
+
+    function rebuildBasemapPaths() {
+        rebuildGridPath();
+        rebuildWorldPaths();
+        rebuildLakePath();
+        rebuildBorderPath();
+        rebuildStatePath();
+        projectBasemapPoints(countryLabels);
+        projectBasemapPoints(stateLabels);
+        projectBasemapPoints(cityPoints);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -4370,58 +4568,33 @@
      * Always runs — even at zoom 1, the user can pan horizontally
      * so we need to fill any exposed edges with adjacent copies.
      */
-    function getWrapOffsets() {
-        // World width in pixels at current zoom
-        const worldWidthPx = W * view.zoom;
-
-        // How many full world copies could fit in the viewport + margin
+    function getWrapOffsetsFor(viewState, margin) {
+        const worldWidthPx = W * viewState.zoom;
         const copiesNeeded = Math.ceil(W / worldWidthPx) + 2;
-
+        const centerX = W / 2 - viewState.x * viewState.zoom;
         const offsets = [];
         for (let i = -copiesNeeded; i <= copiesNeeded; i++) {
-            const off = i * 360;
-            // Project the left and right edges of this world copy
-            const leftPx = worldToScreen(-180 + off, 0).x;
-            const rightPx = worldToScreen(180 + off, 0).x;
-            // Include if any part of this copy overlaps the viewport (with margin)
-            if (rightPx > -200 && leftPx < W + 200) {
-                offsets.push(off);
+            const leftPx = centerX - worldWidthPx / 2 + i * worldWidthPx;
+            const rightPx = leftPx + worldWidthPx;
+            if (rightPx > -margin && leftPx < W + margin) {
+                offsets.push(i * 360);
             }
         }
-
         return offsets.length > 0 ? offsets : [0];
+    }
+
+    function getWrapOffsets() {
+        return getWrapOffsetsFor(view, 200);
+    }
+
+    function getBasemapWrapOffsets() {
+        return getWrapOffsetsFor(view, 0);
     }
 
     /** Draw subtle lat/lon grid lines (with wrap) */
     function drawGrid() {
-        if (!advSettings.gridVisible) return;
-        ctx.strokeStyle = advColors.gridColor;
-        ctx.lineWidth = advColors.gridWidth;
-        const offsets = getWrapOffsets();
-
-        for (const off of offsets) {
-            // Longitude lines (vertical on map)
-            for (let lon = -180; lon <= 180; lon += CFG.gridSpacing) {
-                ctx.beginPath();
-                for (let lat = -85; lat <= 85; lat += 2) {
-                    const s = worldToScreen(lon + off, lat);
-                    if (lat === -85) ctx.moveTo(s.x, s.y);
-                    else ctx.lineTo(s.x, s.y);
-                }
-                ctx.stroke();
-            }
-
-            // Latitude lines (horizontal on map)
-            for (let lat = -60; lat <= 80; lat += CFG.gridSpacing) {
-                ctx.beginPath();
-                for (let lon = -180; lon <= 180; lon += 2) {
-                    const s = worldToScreen(lon + off, lat);
-                    if (lon === -180) ctx.moveTo(s.x, s.y);
-                    else ctx.lineTo(s.x, s.y);
-                }
-                ctx.stroke();
-            }
-        }
+        if (!advSettings.gridVisible || !basemapPaths.grid) return;
+        drawLinePathCopies(basemapPaths.grid, advColors.gridColor, advColors.gridWidth);
     }
 
     /**
@@ -4429,68 +4602,57 @@
      * Each polygon has one or more rings: ring[0] = outer boundary,
      * ring[1+] = holes. Uses evenodd fill rule to cut out holes.
      */
-    function drawPolygonSet(polygons, fillStyle, strokeStyle, lonOffset) {
-        ctx.fillStyle = fillStyle;
-        ctx.strokeStyle = strokeStyle;
-        ctx.lineWidth = CFG.coastlineWidth;
+    function setBasemapWorldTransform(lonOffset) {
+        const zoom = view.zoom;
+        const wrapX = W * lonOffset / 360;
+        baseCtx.setTransform(
+            basemapDpr * zoom, 0, 0, basemapDpr * zoom,
+            basemapDpr * (W / 2 - view.x * zoom + wrapX * zoom),
+            basemapDpr * (H / 2 - view.y * zoom)
+        );
+    }
 
-        for (const poly of polygons) {
-            ctx.beginPath();
-            for (const ring of poly) {
-                for (let i = 0; i < ring.length; i++) {
-                    const s = worldToScreen(ring[i][0] + lonOffset, ring[i][1]);
-                    if (i === 0) ctx.moveTo(s.x, s.y);
-                    else ctx.lineTo(s.x, s.y);
-                }
-                ctx.closePath();
-            }
-            ctx.fill('evenodd');
-            ctx.stroke();
+    function drawPolygonSet(path, fillStyle, strokeStyle) {
+        if (!path) return;
+        baseCtx.fillStyle = fillStyle;
+        baseCtx.strokeStyle = strokeStyle;
+        baseCtx.lineWidth = CFG.coastlineWidth / view.zoom;
+        for (const off of getBasemapWrapOffsets()) {
+            setBasemapWorldTransform(off);
+            baseCtx.fill(path, 'evenodd');
+            baseCtx.stroke(path);
         }
     }
 
     /** Draw landmasses at all visible wrap positions */
     function drawLandmasses() {
         if (!worldReady) return;
-        const offsets = getWrapOffsets();
-        // Draw all land with land colour
-        for (const off of offsets) {
-            drawPolygonSet(worldPolygons, advColors.landFill, advColors.landStroke, off);
-        }
+        drawPolygonSet(basemapPaths.land, advColors.landFill, advColors.landStroke);
         // Overdraw polar regions with ice at snowPoles opacity (0-100 slider → 0-1 alpha)
-        if (advSettings.snowPoles > 0 && polarPolygons.length > 0) {
-            ctx.globalAlpha = advSettings.snowPoles / 100;
-            for (const off of offsets) {
-                drawPolygonSet(polarPolygons, advColors.iceFill, advColors.iceStroke, off);
-            }
-            ctx.globalAlpha = 1;
+        if (advSettings.snowPoles > 0 && basemapPaths.polar) {
+            baseCtx.globalAlpha = advSettings.snowPoles / 100;
+            drawPolygonSet(basemapPaths.polar, advColors.iceFill, advColors.iceStroke);
+            baseCtx.globalAlpha = 1;
         }
     }
 
     /** Draw lakes on top of land using ocean colour to "carve" them out */
     function drawLakes() {
         if (!lakesReady) return;
-        const offsets = getWrapOffsets();
-        for (const off of offsets) {
-            drawPolygonSet(lakePolygons, advColors.lakeFill, advColors.lakeStroke, off);
-        }
+        drawPolygonSet(basemapPaths.lakes, advColors.lakeFill, advColors.lakeStroke);
     }
 
     /**
      * Draw line strings (borders) at a given longitude offset.
      * Used for both country and state borders.
      */
-    function drawLineSet(lines, strokeStyle, lineWidth, lonOffset) {
-        ctx.strokeStyle = strokeStyle;
-        ctx.lineWidth = lineWidth;
-        for (const line of lines) {
-            ctx.beginPath();
-            for (let i = 0; i < line.length; i++) {
-                const s = worldToScreen(line[i][0] + lonOffset, line[i][1]);
-                if (i === 0) ctx.moveTo(s.x, s.y);
-                else ctx.lineTo(s.x, s.y);
-            }
-            ctx.stroke();
+    function drawLinePathCopies(path, strokeStyle, lineWidth) {
+        if (!path) return;
+        baseCtx.strokeStyle = strokeStyle;
+        baseCtx.lineWidth = lineWidth / view.zoom;
+        for (const off of getBasemapWrapOffsets()) {
+            setBasemapWorldTransform(off);
+            baseCtx.stroke(path);
         }
     }
 
@@ -4502,10 +4664,19 @@
         const alpha = (0.25 + clamp((view.zoom - 1) / 3, 0, 1) * 0.15) * bScale;
         const strokeW = Math.max(0.5, 0.8 * view.zoom * bScale);
         const rgb = advColors.borderRGB;
-        const offsets = getWrapOffsets();
-        for (const off of offsets) {
-            drawLineSet(borderLines, `rgba(${rgb},${alpha})`, strokeW, off);
+        drawLinePathCopies(basemapPaths.borders, `rgba(${rgb},${alpha})`, strokeW);
+    }
+
+    function basemapPointToScreen(point, lonOffset) {
+        if (point.mapX === undefined || point.mapY === undefined) {
+            const p = basePoint(point.c[0], point.c[1]);
+            point.mapX = p.x;
+            point.mapY = p.y;
         }
+        return {
+            x: (point.mapX + W * lonOffset / 360) * view.zoom + W / 2 - view.x * view.zoom,
+            y: point.mapY * view.zoom + H / 2 - view.y * view.zoom,
+        };
     }
 
     /**
@@ -4523,24 +4694,25 @@
         // Font size scales with zoom, starts readable and grows
         const fontSize = clamp(8 + (view.zoom - ZOOM_SHOW_COUNTRY_LABELS) * 1.2, 8, 18);
 
-        ctx.font = `600 ${fontSize}px 'SF Mono','Fira Code',Consolas,monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        baseCtx.setTransform(basemapDpr, 0, 0, basemapDpr, 0, 0);
+        baseCtx.font = `600 ${fontSize}px 'SF Mono','Fira Code',Consolas,monospace`;
+        baseCtx.textAlign = 'center';
+        baseCtx.textBaseline = 'middle';
 
-        const offsets = getWrapOffsets();
+        const offsets = getBasemapWrapOffsets();
 
         for (const label of countryLabels) {
             for (const off of offsets) {
-                const s = worldToScreen(label.c[0] + off, label.c[1]);
+                const s = basemapPointToScreen(label, off);
                 // Cull off-screen labels
                 if (s.x < -150 || s.x > W + 150 || s.y < -30 || s.y > H + 30) continue;
 
                 // Shadow behind text for readability against land
-                ctx.fillStyle = `rgba(${canvasLabelColors.countryShadow},${alpha * 0.6})`;
-                ctx.fillText(label.n, s.x + 1, s.y + 1);
+                baseCtx.fillStyle = `rgba(${canvasLabelColors.countryShadow},${alpha * 0.6})`;
+                baseCtx.fillText(label.n, s.x + 1, s.y + 1);
                 // Country name fill
-                ctx.fillStyle = `rgba(${canvasLabelColors.countryText},${alpha})`;
-                ctx.fillText(label.n, s.x, s.y);
+                baseCtx.fillStyle = `rgba(${canvasLabelColors.countryText},${alpha})`;
+                baseCtx.fillText(label.n, s.x, s.y);
             }
         }
     }
@@ -4553,10 +4725,7 @@
         const alpha = clamp((view.zoom - ZOOM_SHOW_STATES) / 1.5, 0, 1) * 0.20 * bScale;
         const strokeW = Math.max(0.5, 0.5 * view.zoom * bScale);
         const rgb = advColors.borderRGB;
-        const offsets = getWrapOffsets();
-        for (const off of offsets) {
-            drawLineSet(stateLines, `rgba(${rgb},${alpha})`, strokeW, off);
-        }
+        drawLinePathCopies(basemapPaths.states, `rgba(${rgb},${alpha})`, strokeW);
     }
 
     /**
@@ -4573,20 +4742,21 @@
         // Font size: smaller than country labels, scales gently
         const fontSize = clamp(7 + (view.zoom - ZOOM_SHOW_STATE_LABELS) * 0.6, 7, 13);
 
-        ctx.font = `${fontSize}px 'SF Mono','Fira Code',Consolas,monospace`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        baseCtx.setTransform(basemapDpr, 0, 0, basemapDpr, 0, 0);
+        baseCtx.font = `${fontSize}px 'SF Mono','Fira Code',Consolas,monospace`;
+        baseCtx.textAlign = 'center';
+        baseCtx.textBaseline = 'middle';
 
-        const offsets = getWrapOffsets();
+        const offsets = getBasemapWrapOffsets();
 
         for (const label of stateLabels) {
             for (const off of offsets) {
-                const s = worldToScreen(label.c[0] + off, label.c[1]);
+                const s = basemapPointToScreen(label, off);
                 if (s.x < -100 || s.x > W + 100 || s.y < -20 || s.y > H + 20) continue;
 
                 // Subtle state/province name
-                ctx.fillStyle = `rgba(${canvasLabelColors.stateText},${alpha})`;
-                ctx.fillText(label.n, s.x, s.y);
+                baseCtx.fillStyle = `rgba(${canvasLabelColors.stateText},${alpha})`;
+                baseCtx.fillText(label.n, s.x, s.y);
             }
         }
     }
@@ -4612,31 +4782,79 @@
         // Overall opacity fades in from the first threshold
         const alpha = clamp((view.zoom - ZOOM_SHOW_CITIES_MAJOR) / 0.5, 0, 1) * 0.7;
 
-        const offsets = getWrapOffsets();
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
+        const offsets = getBasemapWrapOffsets();
+        baseCtx.setTransform(basemapDpr, 0, 0, basemapDpr, 0, 0);
+        baseCtx.textAlign = 'left';
+        baseCtx.textBaseline = 'middle';
 
         for (const city of cityPoints) {
             if (city.p < minPop) continue;
 
             for (const off of offsets) {
-                const s = worldToScreen(city.c[0] + off, city.c[1]);
+                const s = basemapPointToScreen(city, off);
                 // Cull off-screen cities
                 if (s.x < -50 || s.x > W + 50 || s.y < -20 || s.y > H + 20) continue;
 
                 // Small dot
-                ctx.fillStyle = `rgba(${canvasLabelColors.cityDot},${alpha * 0.5})`;
-                ctx.beginPath();
-                ctx.arc(s.x, s.y, 1.5, 0, Math.PI * 2);
-                ctx.fill();
+                baseCtx.fillStyle = `rgba(${canvasLabelColors.cityDot},${alpha * 0.5})`;
+                baseCtx.beginPath();
+                baseCtx.arc(s.x, s.y, 1.5, 0, Math.PI * 2);
+                baseCtx.fill();
 
                 // City name label
                 const fontSize = city.p > 5000000 ? 10 : city.p > 1000000 ? 9 : 8;
-                ctx.font = `${fontSize}px 'SF Mono','Fira Code',Consolas,monospace`;
-                ctx.fillStyle = `rgba(${canvasLabelColors.cityText},${alpha * 0.6})`;
-                ctx.fillText(city.n, s.x + 5, s.y);
+                baseCtx.font = `${fontSize}px 'SF Mono','Fira Code',Consolas,monospace`;
+                baseCtx.fillStyle = `rgba(${canvasLabelColors.cityText},${alpha * 0.6})`;
+                baseCtx.fillText(city.n, s.x + 5, s.y);
             }
         }
+    }
+
+    function renderBasemap() {
+        baseCtx.setTransform(basemapDpr, 0, 0, basemapDpr, 0, 0);
+        baseCtx.globalAlpha = 1;
+        baseCtx.fillStyle = advColors.oceanFill;
+        baseCtx.fillRect(0, 0, W, H);
+        document.body.style.backgroundColor = advColors.oceanFill;
+
+        drawGrid();
+        drawLandmasses();
+        drawLakes();
+        drawCountryBorders();
+        drawCountryLabels();
+        drawStateBorders();
+        drawStateLabels();
+        drawCities();
+
+        basemapView = { x: view.x, y: view.y, zoom: view.zoom };
+        basemapCanvas.style.transform = 'none';
+        lastBasemapTransform = 'none';
+        basemapDirty = false;
+    }
+
+    function transformCachedBasemap() {
+        if (!basemapView) return;
+        const scale = view.zoom / basemapView.zoom;
+        const translateX = W * 0.5 * (1 - scale) + view.zoom * (basemapView.x - view.x);
+        const translateY = H * 0.5 * (1 - scale) + view.zoom * (basemapView.y - view.y);
+        const transform = `matrix(${scale},0,0,${scale},${translateX},${translateY})`;
+        if (transform !== lastBasemapTransform) {
+            basemapCanvas.style.transform = transform;
+            lastBasemapTransform = transform;
+        }
+    }
+
+    function cameraSettled() {
+        return Math.abs(view.x - targetView.x) < 0.25 &&
+            Math.abs(view.y - targetView.y) < 0.25 &&
+            Math.abs(view.zoom - targetView.zoom) < 0.001;
+    }
+
+    function basemapMatchesView() {
+        return basemapView &&
+            Math.abs(view.x - basemapView.x) < 0.25 &&
+            Math.abs(view.y - basemapView.y) < 0.25 &&
+            Math.abs(view.zoom - basemapView.zoom) < 0.001;
     }
 
     /**
@@ -6727,41 +6945,56 @@
         }
     }
 
-    function frame() {
-        const now = Date.now();
+    let lastPeerFrameTime = 0;
 
-        // Smooth view interpolation (pan/zoom easing)
-        view.x = lerp(view.x, targetView.x, CFG.panSmooth);
-        view.y = lerp(view.y, targetView.y, CFG.panSmooth);
-        view.zoom = lerp(view.zoom, targetView.zoom, CFG.panSmooth);
+    function frame(timestamp) {
+        const now = Date.now();
+        const interacting = document.body.classList.contains('map-interacting');
+
+        // Direct tracking keeps pointer-driven movement responsive. Programmatic
+        // zoom and focus changes retain the existing eased camera movement.
+        if (interacting) {
+            view.x = targetView.x;
+            view.y = targetView.y;
+            view.zoom = targetView.zoom;
+        } else {
+            view.x = lerp(view.x, targetView.x, CFG.panSmooth);
+            view.y = lerp(view.y, targetView.y, CFG.panSmooth);
+            view.zoom = lerp(view.zoom, targetView.zoom, CFG.panSmooth);
+        }
 
         // Lock view within world bounds
         clampView();
+        ensureZoomDetailLoaded(Math.max(view.zoom, targetView.zoom));
 
-        // Clear canvas with ocean colour
-        ctx.fillStyle = advColors.oceanFill;
-        ctx.fillRect(0, 0, W, H);
+        const settled = cameraSettled();
+        document.body.classList.toggle('map-camera-moving', !settled && !interacting);
+        if (settled && !interacting) {
+            view.x = targetView.x;
+            view.y = targetView.y;
+            view.zoom = targetView.zoom;
+            if (basemapDirty || !basemapMatchesView()) renderBasemap();
+        } else if (!basemapView) {
+            renderBasemap();
+        } else {
+            transformCachedBasemap();
+        }
+
+        // Peer effects remain animated, but idle rendering is capped at 30fps.
+        // Interaction and camera motion use 60fps for direct visual feedback.
+        const frameInterval = (interacting || !settled) ? (1000 / 60) : (1000 / 30);
+        if (timestamp - lastPeerFrameTime < frameInterval - 1) {
+            requestAnimationFrame(frame);
+            return;
+        }
+        lastPeerFrameTime = timestamp;
+
+        ctx.setTransform(peerDpr, 0, 0, peerDpr, 0, 0);
+        ctx.clearRect(0, 0, W, H);
 
         // Compute wrap offsets once per frame
         const wrapOffsets = getWrapOffsets();
 
-        // Draw layers bottom-to-top:
-        // 1. Grid lines (always visible)
-        drawGrid();
-        // 2. Land polygons (always visible)
-        drawLandmasses();
-        // 3. Lakes carved out on top of land (always visible)
-        drawLakes();
-        // 4. Country borders (always visible at all zoom levels)
-        drawCountryBorders();
-        // 5. Country name labels (zoom >= 1.5) — first text layer
-        drawCountryLabels();
-        // 6. State/province borders (zoom >= 3.0, zoom-aware stroke width)
-        drawStateBorders();
-        // 7. State/province name labels (zoom >= 4.0, after countries)
-        drawStateLabels();
-        // 8. City labels (zoom >= 6.0, after states visible)
-        drawCities();
         // [PRIVATE-NET] Draw "PRIVATE NETWORKS" text across Antarctica
         if (privateNetMode) {
             drawPrivateNetworksText();
@@ -6807,11 +7040,6 @@
             if (hlNode) drawHighlightRing(hlNode, now, wrapOffsets);
         }
 
-        // Update HUD overlays
-        updateHUD();
-        updateClock();
-        updateAntarcticaNote();
-
         requestAnimationFrame(frame);
     }
 
@@ -6823,7 +7051,12 @@
     let dragZoom = 1;  // zoom level when drag started
     let dragMoved = false;  // track if mouse moved during drag (vs click)
     canvas.addEventListener('mousedown', (e) => {
+        if (wheelInteractionTimer) {
+            clearTimeout(wheelInteractionTimer);
+            wheelInteractionTimer = null;
+        }
         dragging = true;
+        setMapInteraction(true);
         dragMoved = false;
         dragStart.x = e.clientX;
         dragStart.y = e.clientY;
@@ -6879,6 +7112,7 @@
     });
 
     window.addEventListener('mouseup', (e) => {
+        setMapInteraction(false);
         if (dragging && !dragMoved) {
             // [PRIVATE-NET] In private net mode, handle clicks on private peers
             if (privateNetMode) {
@@ -7052,6 +7286,10 @@
 
     // ── Clear hover state when mouse leaves the browser window ──
     document.addEventListener('mouseleave', () => {
+        if (dragging) {
+            dragging = false;
+            setMapInteraction(false);
+        }
         if (hoveredNode && !pinnedNode && !groupedNodes) {
             hideTooltip();
             highlightTableRow(null);
@@ -7061,8 +7299,15 @@
     });
 
     // ── Mouse wheel zoom (zooms toward cursor position) ──
+    let wheelInteractionTimer = null;
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
+        setMapInteraction(true);
+        if (wheelInteractionTimer) clearTimeout(wheelInteractionTimer);
+        wheelInteractionTimer = setTimeout(() => {
+            wheelInteractionTimer = null;
+            setMapInteraction(false);
+        }, 140);
         const dir = e.deltaY < 0 ? 1 : -1;
         const factor = dir > 0 ? CFG.zoomStep : 1 / CFG.zoomStep;
         const newZoom = clamp(targetView.zoom * factor, CFG.minZoom, CFG.maxZoom);
@@ -7087,6 +7332,11 @@
     let touchZoom = 1;
     canvas.addEventListener('touchstart', (e) => {
         if (e.touches.length === 1) {
+            if (wheelInteractionTimer) {
+                clearTimeout(wheelInteractionTimer);
+                wheelInteractionTimer = null;
+            }
+            setMapInteraction(true);
             touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
             dragViewStart.x = targetView.x;
             dragViewStart.y = targetView.y;
@@ -7106,7 +7356,14 @@
         }
     }, { passive: true });
 
-    canvas.addEventListener('touchend', () => { touchStart = null; }, { passive: true });
+    canvas.addEventListener('touchend', () => {
+        touchStart = null;
+        setMapInteraction(false);
+    }, { passive: true });
+    canvas.addEventListener('touchcancel', () => {
+        touchStart = null;
+        setMapInteraction(false);
+    }, { passive: true });
 
     // ── Zoom buttons ──
     document.getElementById('zoom-in').addEventListener('click', () => {
@@ -7706,29 +7963,28 @@
     let tweenRafId = null;
 
     function startTweenLoop() {
-        if (tweenRafId) return;
+        if (tweenRafId !== null) return;
+
+        function advanceTween(tween) {
+            if (tween.current === null || tween.target === null || !tween.el) return false;
+
+            const diff = tween.target - tween.current;
+            if (Math.abs(diff) < 0.15) {
+                tween.current = tween.target;
+            } else {
+                tween.current += diff * 0.06;
+            }
+
+            const displayValue = Math.round(tween.current) + '%';
+            if (tween.el.textContent !== displayValue) tween.el.textContent = displayValue;
+            return tween.current !== tween.target;
+        }
+
         function tick() {
-            tweenRafId = requestAnimationFrame(tick);
-            // Lerp CPU (slow glide, ~600ms to settle)
-            if (tweenCpu.current !== null && tweenCpu.target !== null && tweenCpu.el) {
-                const diff = tweenCpu.target - tweenCpu.current;
-                if (Math.abs(diff) < 0.15) {
-                    tweenCpu.current = tweenCpu.target;
-                } else {
-                    tweenCpu.current += diff * 0.06;
-                }
-                tweenCpu.el.textContent = Math.round(tweenCpu.current) + '%';
-            }
-            // Lerp RAM (slow glide)
-            if (tweenRam.current !== null && tweenRam.target !== null && tweenRam.el) {
-                const diff = tweenRam.target - tweenRam.current;
-                if (Math.abs(diff) < 0.15) {
-                    tweenRam.current = tweenRam.target;
-                } else {
-                    tweenRam.current += diff * 0.06;
-                }
-                tweenRam.el.textContent = Math.round(tweenRam.current) + '%';
-            }
+            tweenRafId = null;
+            const cpuActive = advanceTween(tweenCpu);
+            const ramActive = advanceTween(tweenRam);
+            if (cpuActive || ramActive) tweenRafId = requestAnimationFrame(tick);
         }
         tweenRafId = requestAnimationFrame(tick);
     }
@@ -7741,6 +7997,7 @@
         sysStreamSource.addEventListener('system', (e) => {
             try {
                 const d = JSON.parse(e.data);
+                let tweenChanged = false;
 
                 // ── NET traffic (deadband: only update visuals for changes > 2 KB/s) ──
                 const newRx = d.rx_bps || 0;
@@ -7762,8 +8019,10 @@
                     if (tweenCpu.current === null) {
                         tweenCpu.current = d.cpu_pct;
                         tweenCpu.target = d.cpu_pct;
+                        cpuEl.textContent = Math.round(d.cpu_pct) + '%';
                     } else if (Math.abs(d.cpu_pct - tweenCpu.target) >= 1.0) {
                         tweenCpu.target = d.cpu_pct;
+                        tweenChanged = true;
                         pulseOnChange('ro-cpu', Math.round(d.cpu_pct), 'white');
                     }
                 }
@@ -7775,8 +8034,10 @@
                     if (tweenRam.current === null) {
                         tweenRam.current = d.mem_pct;
                         tweenRam.target = d.mem_pct;
+                        ramEl.textContent = Math.round(d.mem_pct) + '%';
                     } else if (Math.abs(d.mem_pct - tweenRam.target) >= 0.5) {
                         tweenRam.target = d.mem_pct;
+                        tweenChanged = true;
                         pulseOnChange('ro-ram', Math.round(d.mem_pct), 'white');
                     }
                     // Update hover tooltip
@@ -7785,6 +8046,8 @@
                     if (d.cpu_pct != null) hoverParts.push(`CPU: ${Math.round(d.cpu_pct)}%`);
                     ramEl.title = hoverParts.join('\n');
                 }
+
+                if (tweenChanged) startTweenLoop();
 
                 // Store for modal use (merge with existing lastSystemStats)
                 if (!lastSystemStats) lastSystemStats = {};
@@ -7999,7 +8262,7 @@
         });
         bindAdvSlider('adv-land-hue', v => { advSettings.landHue = v; updateAdvColors(); });
         bindAdvSlider('adv-land-bright', v => { advSettings.landBright = v; updateAdvColors(); });
-        bindAdvSlider('adv-snow-poles', v => { advSettings.snowPoles = v; });
+        bindAdvSlider('adv-snow-poles', v => { advSettings.snowPoles = v; markBasemapDirty(); });
         bindAdvSlider('adv-ocean-hue', v => { advSettings.oceanHue = v; updateAdvColors(); });
         bindAdvSlider('adv-ocean-bright', v => { advSettings.oceanBright = v; updateAdvColors(); });
 
@@ -8029,12 +8292,15 @@
         bindAdvSlider('adv-grid-bright', v => { advSettings.gridBright = v; updateAdvColors(); });
         bindAdvSlider('adv-as-linewidth', v => { advSettings.asLineWidth = v; });
         bindAdvSlider('adv-as-fan', v => { advSettings.asLineFan = v; });
-        bindAdvSlider('adv-border-scale', v => { advSettings.borderScale = v; });
+        bindAdvSlider('adv-border-scale', v => { advSettings.borderScale = v; markBasemapDirty(); });
         bindAdvSlider('adv-border-hue', v => { advSettings.borderHue = v; updateAdvColors(); });
 
         // ── Bind grid visibility toggle ──
         const gridVisCB = document.getElementById('adv-grid-visible');
-        if (gridVisCB) gridVisCB.addEventListener('change', () => { advSettings.gridVisible = gridVisCB.checked; });
+        if (gridVisCB) gridVisCB.addEventListener('change', () => {
+            advSettings.gridVisible = gridVisCB.checked;
+            markBasemapDirty();
+        });
 
         // ── Bind HUD solid background toggle ──
         const hudSolidCB = document.getElementById('adv-hud-solid');
@@ -8147,13 +8413,13 @@
         'adv-pspeed-out':  { key: 'pulseSpeedOut',   cfgFn: v => { CFG.pulseSpeedOutbound = 0.0026 * Math.pow(2, (v - 50) / 30); } },
         'adv-land-hue':    { key: 'landHue',         recolor: true },
         'adv-land-bright': { key: 'landBright',      recolor: true },
-        'adv-snow-poles':  { key: 'snowPoles' },
+        'adv-snow-poles':  { key: 'snowPoles', redraw: true },
         'adv-ocean-hue':   { key: 'oceanHue',        recolor: true },
         'adv-ocean-bright':{ key: 'oceanBright',     recolor: true },
         'adv-grid-thick':  { key: 'gridThickness',   recolor: true },
         'adv-grid-hue':    { key: 'gridHue',         recolor: true },
         'adv-grid-bright': { key: 'gridBright',      recolor: true },
-        'adv-border-scale':{ key: 'borderScale' },
+        'adv-border-scale':{ key: 'borderScale', redraw: true },
         'adv-border-hue':  { key: 'borderHue',      recolor: true },
     };
 
@@ -8172,6 +8438,7 @@
                     if (info.cfg) CFG[info.cfg] = defVal;
                     if (info.cfgFn) info.cfgFn(defVal);
                     if (info.recolor) updateAdvColors();
+                    if (info.redraw) markBasemapDirty();
                 });
                 return;
             }
@@ -8183,6 +8450,7 @@
                     // Sync the checkbox if there's a matching one
                     const cb = panel.querySelector('#adv-grid-visible');
                     if (defKey === 'gridVisible' && cb) cb.checked = ADV_DEFAULTS[defKey];
+                    if (defKey === 'gridVisible') markBasemapDirty();
                 });
             }
         });
@@ -8546,14 +8814,12 @@
         resize();
         window.addEventListener('resize', resize);
 
-        // Load all Natural Earth geometry + label layers (async, each renders once loaded)
+        // Load the layers visible at the initial zoom. More detailed geography is
+        // fetched shortly before its zoom threshold is reached.
         loadWorldGeometry();
         loadLakeGeometry();
         loadBorderGeometry();
-        loadStateGeometry();
         loadCountryLabels();
-        loadStateLabels();
-        loadCityData();
 
         // Fetch real peer data immediately, then poll every 10s
         lastPeerFetchTime = Date.now();
@@ -8568,7 +8834,6 @@
 
         // System stats + NET speed: real-time SSE stream (dual-EMA smoothed, ~250ms updates)
         connectSystemStream();
-        startTweenLoop();
 
         // Still fetch full system stats once for modal data (uptime, load, disk)
         fetchSystemStats();
@@ -8583,6 +8848,9 @@
         // Start the render loop (grid + nodes render immediately,
         // landmasses + lakes appear once JSON assets finish loading)
         requestAnimationFrame(frame);
+
+        updateClock();
+        setInterval(updateClock, 1000);
 
         // [AS-DIVERSITY] Initialize AS Diversity module (always-on donut)
         initAsDiversity();

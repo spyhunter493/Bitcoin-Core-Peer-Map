@@ -48,13 +48,28 @@ def test_application_factory_serves_health_dashboard_and_assets(tmp_path: Path) 
         dashboard = client.get("/")
         assert "Bitcoin Peer Map" in dashboard.text
         assert "abcdef0" in dashboard.text
+        assert dashboard.headers["cache-control"] == "no-cache"
+        assert 'data-asset-revision="abcdef0123456789abcdef0123456789abcdef01"' in dashboard.text
+        assert "/static/js/app.js?v=abcdef0123456789abcdef0123456789abcdef01" in dashboard.text
         assert (
             "https://github.com/spyhunter493/bitcoin-peer-map/commit/"
             "abcdef0123456789abcdef0123456789abcdef01" in dashboard.text
         )
         assert "bc1qnngus06lk0e60e05yq902e9edx7kt4kcuuuy72" in dashboard.text
         assert "Created by" not in dashboard.text
-        assert client.get("/static/js/app.js").status_code == 200
+
+        unversioned_asset = client.get("/static/js/app.js", headers={"Accept-Encoding": "identity"})
+        assert unversioned_asset.status_code == 200
+        assert unversioned_asset.headers["cache-control"] == ("public, max-age=0, must-revalidate")
+
+        versioned_asset = client.get(
+            "/static/js/app.js?v=abcdef0123456789abcdef0123456789abcdef01",
+            headers={"Accept-Encoding": "gzip"},
+        )
+        assert versioned_asset.status_code == 200
+        assert versioned_asset.headers["cache-control"] == ("public, max-age=31536000, immutable")
+        assert versioned_asset.headers["content-encoding"] == "gzip"
+
         assert client.get("/api/changes").status_code == 404
         assert client.get("/api/netspeed").status_code == 404
         assert client.get("/api/update-check").status_code == 404

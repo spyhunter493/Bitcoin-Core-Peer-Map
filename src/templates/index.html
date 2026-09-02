@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bitcoin Peer Map</title>
-    <link rel="stylesheet" href="/static/css/app.css?v={{ cache_bust }}">
-    <link rel="stylesheet" href="/static/css/as-diversity.css?v={{ cache_bust }}"><!-- [AS-DIVERSITY] -->
+    <link rel="stylesheet" href="/static/css/app.css?v={{ asset_revision }}">
+    <link rel="stylesheet" href="/static/css/as-diversity.css?v={{ asset_revision }}"><!-- [AS-DIVERSITY] -->
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&display=swap" rel="stylesheet">
 </head>
-<body data-repository-url="{{ repository_url }}">
+<body data-repository-url="{{ repository_url }}" data-asset-revision="{{ asset_revision }}">
     <!-- Top bar -->
     <header id="topbar">
         <div class="topbar-left">
@@ -175,7 +175,8 @@
         </div>
     </div>
 
-    <!-- Full-screen canvas map -->
+    <!-- Cached basemap and interactive peer overlay -->
+    <canvas id="basemap" aria-hidden="true"></canvas>
     <canvas id="worldmap"></canvas>
 
     <!-- Tooltip for hovering over map nodes -->
@@ -240,7 +241,7 @@
         <span class="footer-btc" id="footer-btc">Support (btc): <span class="footer-btc-addr">bc1qnngus06lk0e60e05yq902e9edx7kt4kcuuuy72</span></span>
     </footer>
 
-    <script src="/static/js/as-diversity.js?v={{ cache_bust }}"></script><!-- [AS-DIVERSITY] loaded before app.js -->
-    <script src="/static/js/app.js?v={{ cache_bust }}"></script>
+    <script src="/static/js/as-diversity.js?v={{ asset_revision }}"></script><!-- [AS-DIVERSITY] loaded before app.js -->
+    <script src="/static/js/app.js?v={{ asset_revision }}"></script>
 </body>
 </html>
