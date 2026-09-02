@@ -22,6 +22,14 @@ cp .env.example .env
 
 Edit `.env` with the node's RPC address and credentials, then start the application:
 
+```env
+BITCOIN_RPC_HOST=192.168.1.10
+BITCOIN_RPC_USER=bpm
+BITCOIN_RPC_PASSWORD=replace-with-a-long-random-password
+```
+
+The `.env` file is the normal Compose configuration method and is excluded from Git.
+
 ```bash
 BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose up -d --build
 docker compose logs -f bpm
@@ -70,7 +78,9 @@ Set `BITCOIN_RPC_HOST` to the Bitcoin service or container hostname on that netw
 
 ## Configuration
 
-Container configuration is read exclusively from environment variables at startup.
+Docker Compose automatically reads the local `.env` file and passes the configured values into
+the container. Most deployments should set `BITCOIN_RPC_PASSWORD` directly in `.env` and leave
+`BITCOIN_RPC_PASSWORD_FILE` unset.
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
@@ -78,8 +88,8 @@ Container configuration is read exclusively from environment variables at startu
 | `BITCOIN_RPC_HOST` | Yes | - | Bitcoin Core/Knots RPC hostname or address |
 | `BITCOIN_RPC_PORT` | No | `8332` | RPC port |
 | `BITCOIN_RPC_USER` | Yes | - | Dedicated RPC username |
-| `BITCOIN_RPC_PASSWORD` | Yes* | - | RPC password |
-| `BITCOIN_RPC_PASSWORD_FILE` | Yes* | - | Path to a mounted secret containing the RPC password |
+| `BITCOIN_RPC_PASSWORD` | Yes* | - | RPC password; use this for the normal `.env` setup |
+| `BITCOIN_RPC_PASSWORD_FILE` | No* | - | Optional path to a mounted secret containing the RPC password |
 | `BITCOIN_RPC_VERIFY_TLS` | No | `true` | Verify the RPC HTTPS certificate |
 | `BITCOIN_RPC_TIMEOUT` | No | `30` | Per-request timeout in seconds |
 | `BITCOIN_NETWORK` | No | `main` | `main`, `test`, `signet`, or `regtest` |
@@ -89,9 +99,16 @@ Container configuration is read exclusively from environment variables at startu
 | `BPM_GEOIP_ENABLED` | No | `true` | Enable the persistent GeoIP database |
 | `BPM_GEOIP_AUTO_UPDATE` | No | saved setting | Override automatic GeoIP dataset updates |
 
-*Set one of `BITCOIN_RPC_PASSWORD` or `BITCOIN_RPC_PASSWORD_FILE`.*
+*`BITCOIN_RPC_PASSWORD` is required unless `BITCOIN_RPC_PASSWORD_FILE` is used instead. Do not set
+both variables; the application will reject the configuration.*
 
-For a Compose secret, add an override similar to:
+### Optional Compose Secret
+
+The standard `.env` setup does not require a password file. Use this alternative only when the
+deployment supplies secrets as mounted files, such as Docker Compose secrets, Docker Swarm,
+Kubernetes, or a container-management platform.
+
+For a Compose secret, store the password in a protected local file and add an override similar to:
 
 ```yaml
 services:
@@ -106,6 +123,10 @@ secrets:
   bitcoin_rpc_password:
     file: ./secrets/bitcoin_rpc_password
 ```
+
+Compose mounts the secret at `/run/secrets/bitcoin_rpc_password`; the environment contains only
+that path, and Bitcoin Peer Map reads the password from the mounted file during startup. The
+`secrets/` directory is excluded from Git.
 
 ## Persistence
 

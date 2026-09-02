@@ -25,6 +25,7 @@
     const STORAGE_KEYS = Object.freeze({
         theme: 'bpm.theme',
         peerTableDisplay: 'bpm.peerTable.display',
+        antarcticaDisclaimerSeen: 'bpm.antarcticaDisclaimerSeen',
     });
     const repositoryUrl = document.body.dataset.repositoryUrl;
     const repositoryDiscussionsUrl = `${repositoryUrl}/discussions`;
@@ -7406,7 +7407,7 @@
         });
 
         // Antarctica annotation visibility is controlled by showAntarcticaPeers setting
-        // and session dismissal — no longer tied to filter toggles
+        // and persistent dismissal — no longer tied to filter toggles
     }
 
     // Click to toggle network badges (radio-then-additive model)
@@ -7469,6 +7470,19 @@
                 antOverlay.classList.add('hidden');
             }
         });
+    }
+
+    function showAntarcticaDisclaimerOnce() {
+        if (!showAntarcticaPeers || !antOverlay) return;
+
+        try {
+            if (localStorage.getItem(STORAGE_KEYS.antarcticaDisclaimerSeen) === 'true') return;
+            localStorage.setItem(STORAGE_KEYS.antarcticaDisclaimerSeen, 'true');
+        } catch (e) {
+            // Storage may be unavailable in restricted browser contexts.
+        }
+
+        antOverlay.classList.remove('hidden');
     }
 
     /** Build popover HTML for a network type or "all" */
@@ -8840,10 +8854,7 @@
         // Re-fetch full stats every 30s for modal freshness (uptime, load, disk only)
         setInterval(fetchSystemStats, 30000);
 
-        // Show Antarctica modal on every page load (if setting is ON)
-        if (showAntarcticaPeers && antOverlay) {
-            antOverlay.classList.remove('hidden');
-        }
+        showAntarcticaDisclaimerOnce();
 
         // Start the render loop (grid + nodes render immediately,
         // landmasses + lakes appear once JSON assets finish loading)
