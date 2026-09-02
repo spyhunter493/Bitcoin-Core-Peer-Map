@@ -47,7 +47,7 @@ def test_application_factory_serves_health_dashboard_and_assets(tmp_path: Path) 
         assert client.get("/api/stats").json() == {"system_stats": {"cpu_pct": 12.5}}
         dashboard = client.get("/")
         assert "Bitcoin Peer Map" in dashboard.text
-        assert "abcdef012345" in dashboard.text
+        assert "abcdef0" in dashboard.text
         assert (
             "https://github.com/spyhunter493/bitcoin-peer-map/commit/"
             "abcdef0123456789abcdef0123456789abcdef01" in dashboard.text

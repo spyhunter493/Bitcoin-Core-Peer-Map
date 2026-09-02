@@ -119,7 +119,7 @@ RPC credentials are never written to the volume. Browser display preferences rem
 
 ## Build Revision
 
-The header displays the first 12 characters of the Git commit embedded in the image and links to that exact commit on GitHub. Pass the full commit SHA whenever the image is built:
+The header displays the first seven characters of the Git commit embedded in the image and links to that exact commit on GitHub. Pass the full commit SHA whenever the image is built:
 
 ```bash
 BPM_BUILD_REVISION="$(git rev-parse HEAD)" docker compose build

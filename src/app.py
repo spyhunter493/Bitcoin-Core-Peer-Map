@@ -53,7 +53,7 @@ def create_app(settings: AppSettings, runtime: AppRuntime | None = None) -> Fast
             request,
             "index.html",
             {
-                "revision": revision[:12] if revision != "unknown" else revision,
+                "revision": revision[:7] if revision != "unknown" else revision,
                 "revision_url": revision_url,
                 "cache_bust": int(time.time()),
                 "repository_url": repository_url,
