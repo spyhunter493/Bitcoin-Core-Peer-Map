@@ -126,6 +126,61 @@ class NodeService:
         except RpcError as exc:
             return {"blockchain": None, "error": str(exc)}
 
+    def recent_blocks(self, limit: int = 25) -> dict[str, Any]:
+        try:
+            limit = max(1, min(int(limit), 100))
+        except (TypeError, ValueError):
+            limit = 25
+
+        try:
+            blockchain = self.rpc.call("getblockchaininfo", timeout=10)
+            tip_height = int(blockchain.get("blocks", 0) or 0)
+            start_height = max(tip_height - limit + 1, 0)
+            generated_at = int(time.time())
+            blocks = []
+
+            for height in range(tip_height, start_height - 1, -1):
+                block_hash = self.rpc.call("getblockhash", height, timeout=10)
+                block = self.rpc.call("getblock", block_hash, 1, timeout=10)
+                block_time = int(block.get("time", 0) or 0)
+                size = int(block.get("size", 0) or 0)
+                tx_count = block.get("nTx")
+                if tx_count is None and isinstance(block.get("tx"), list):
+                    tx_count = len(block["tx"])
+
+                blocks.append(
+                    {
+                        "height": height,
+                        "hash": block_hash,
+                        "time": block_time,
+                        "age_seconds": max(0, generated_at - block_time) if block_time else None,
+                        "size": size,
+                        "size_mb": round(size / 1_000_000, 3),
+                        "weight": int(block.get("weight", 0) or 0),
+                        "tx_count": int(tx_count or 0),
+                        "version": block.get("version"),
+                        "difficulty": block.get("difficulty"),
+                    }
+                )
+
+            count = len(blocks)
+            total_size = sum(block["size"] for block in blocks)
+            total_transactions = sum(block["tx_count"] for block in blocks)
+            summary = {
+                "chain": blockchain.get("chain"),
+                "tip_height": tip_height,
+                "count": count,
+                "latest_time": blocks[0]["time"] if blocks else None,
+                "total_size": total_size,
+                "avg_size_mb": round(total_size / count / 1_000_000, 3) if count else 0,
+                "total_transactions": total_transactions,
+                "avg_transactions": round(total_transactions / count, 1) if count else 0,
+                "generated_at": generated_at,
+            }
+            return {"success": True, "summary": summary, "blocks": blocks, "error": None}
+        except (RpcError, TypeError, ValueError) as exc:
+            return {"success": False, "summary": None, "blocks": [], "error": str(exc)}
+
     async def disconnect(self, peer_id: Any) -> dict[str, Any]:
         if peer_id is None:
             return {"success": False, "error": "peer_id is required"}
