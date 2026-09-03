@@ -106,7 +106,7 @@
         pulseDepthOut:   0.48,       // outbound pulse amplitude
         pulseSpeedIn:    50,         // slider 0-100, 50 = original speed
         pulseSpeedOut:   50,         // slider 0-100, 50 = original speed
-        // AS Diversity line settings
+        // AS Distribution line settings
         asLineWidth:     40,         // slider 0-100, 40 = ~1.8px (default — visible)
         asLineFan:       50,         // slider 0-100, 50 = 35% spread (default)
         // Land appearance
@@ -624,13 +624,17 @@
 
     // Bitcoin protocol service flag abbreviations and descriptions
     const SERVICE_FLAGS = {
-        'NETWORK':          { abbr: 'N',  desc: 'Full chain history (NODE_NETWORK)' },
-        'WITNESS':          { abbr: 'W',  desc: 'Segregated Witness support (NODE_WITNESS)' },
-        'NETWORK_LIMITED':  { abbr: 'NL', desc: 'Limited chain history, last 288 blocks (NODE_NETWORK_LIMITED)' },
-        'P2P_V2':           { abbr: 'P',  desc: 'BIP324 v2 encrypted transport (P2P_V2)' },
-        'COMPACT_FILTERS':  { abbr: 'CF', desc: 'BIP157/158 compact block filters (NODE_COMPACT_FILTERS)' },
-        'BLOOM':            { abbr: 'B',  desc: 'BIP37 Bloom filter support (NODE_BLOOM)' },
+        'NETWORK':          { abbr: 'N',  label: 'Full chain history', rpc: 'NODE_NETWORK' },
+        'WITNESS':          { abbr: 'W',  label: 'Segregated Witness', rpc: 'NODE_WITNESS' },
+        'NETWORK_LIMITED':  { abbr: 'NL', label: 'Limited chain history', rpc: 'NODE_NETWORK_LIMITED' },
+        'P2P_V2':           { abbr: 'P',  label: 'BIP324 v2 transport', rpc: 'P2P_V2' },
+        'COMPACT_FILTERS':  { abbr: 'CF', label: 'Compact block filters', rpc: 'NODE_COMPACT_FILTERS' },
+        'BLOOM':            { abbr: 'B',  label: 'Bloom filters', rpc: 'NODE_BLOOM' },
     };
+
+    function serviceFlagDescription(flag) {
+        return flag.rpc ? `${flag.label} (${flag.rpc})` : flag.label;
+    }
 
     /** Build unique short abbreviation string from services array */
     function serviceAbbrev(services) {
@@ -643,8 +647,45 @@
         if (!services || !services.length) return 'No service flags';
         return services.map(s => {
             const f = SERVICE_FLAGS[s];
-            return f ? `${f.abbr} = ${f.desc}` : s;
+            return f ? `${f.abbr} = ${serviceFlagDescription(f)}` : s;
         }).join('\n');
+    }
+
+    function escapeServiceHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        }[ch]));
+    }
+
+    function serviceFlagFromAbbr(abbr) {
+        for (const flag of Object.values(SERVICE_FLAGS)) {
+            if (flag.abbr === abbr) return flag;
+        }
+        return null;
+    }
+
+    function renderServiceFlagList(abbrev) {
+        if (!abbrev || abbrev === '\u2014') return '\u2014';
+        const flags = abbrev.split(/\s+/).map(f => f.trim()).filter(Boolean);
+        if (!flags.length) return '\u2014';
+
+        return '<div class="service-flag-list">'
+            + flags.map(abbr => {
+                const flag = serviceFlagFromAbbr(abbr);
+                const label = flag ? flag.label : 'Unknown service flag';
+                const rpc = flag ? flag.rpc : abbr;
+                const title = flag ? serviceFlagDescription(flag) : abbr;
+                return '<div class="service-flag-row" title="' + escapeServiceHtml(title) + '">'
+                    + '<span class="service-flag-abbr">' + escapeServiceHtml(abbr) + '</span>'
+                    + '<span class="service-flag-label">' + escapeServiceHtml(label) + '</span>'
+                    + '<span class="service-flag-rpc">' + escapeServiceHtml(rpc) + '</span>'
+                    + '</div>';
+            }).join('')
+            + '</div>';
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -719,7 +760,7 @@
     let mapFilterPeerIds = null;   // Set of peer IDs to show when a map dot is clicked (null = no filter)
     let groupedNodes = null;       // Array of nodes at clicked dot (for back navigation from drill-down)
 
-    // [AS-DIVERSITY] State for AS Diversity integration
+    // [AS-DISTRIBUTION] State for AS Distribution integration
     let asFilterPeerIds = null;    // Set of peer IDs to show when AS is selected (null = no filter)
     let asLinePeerIds = null;      // Array of peer IDs to draw lines to (hover/selection)
     let asLineColor = null;        // Color string for AS lines
@@ -992,7 +1033,7 @@
         chip.addEventListener('mouseleave', () => {
             if (fdTooltipEl) fdTooltipEl.classList.add('hidden');
         });
-        // Click: IPv4/IPv6 → open AS diversity focused mode, Tor/I2P/CJDNS → enter private mode
+        // Click: IPv4/IPv6 → open AS distribution focused mode, Tor/I2P/CJDNS → enter private mode
         chip.addEventListener('click', (e) => {
             e.stopPropagation();
             if (fdTooltipEl) fdTooltipEl.classList.add('hidden');
@@ -1012,12 +1053,12 @@
             } else {
                 // Public network chip (ipv4/ipv6) → exit private mode if active, open network panel
                 if (privateNetMode) exitPrivateNetMode();
-                if (window.ASDiversity) {
-                    if (!window.ASDiversity.isFocusedMode()) {
-                        window.ASDiversity.enterFocusedMode();
+                if (window.ASDistribution) {
+                    if (!window.ASDistribution.isFocusedMode()) {
+                        window.ASDistribution.enterFocusedMode();
                     }
                     // Open the dedicated IPv4/IPv6 network detail panel
-                    window.ASDiversity.openNetworkPanel(netKey);
+                    window.ASDistribution.openNetworkPanel(netKey);
                 }
             }
         });
@@ -1390,7 +1431,7 @@
     // ═══════════════════════════════════════════════════════════
     // PRIVATE NETWORK MODE — Full Antarctica view for Tor/I2P/CJDNS
     // Circular donut + detail panel with cascading sub-tooltips
-    // (mirrors the AS Diversity panel pattern)
+    // (mirrors the AS Distribution panel pattern)
     // ═══════════════════════════════════════════════════════════
 
     // Donut configuration
@@ -1465,12 +1506,12 @@
         privateNetMode = true;
         document.body.classList.add('private-net-mode');
 
-        // Close any existing AS diversity panels/tooltips
-        if (window.ASDiversity) {
-            window.ASDiversity.closePeerPopup();
-            window.ASDiversity.deselect();
-            if (window.ASDiversity.isFocusedMode()) {
-                window.ASDiversity.exitFocusedMode();
+        // Close any existing AS distribution panels/tooltips
+        if (window.ASDistribution) {
+            window.ASDistribution.closePeerPopup();
+            window.ASDistribution.deselect();
+            if (window.ASDistribution.isFocusedMode()) {
+                window.ASDistribution.exitFocusedMode();
             }
         }
         hideTooltip();
@@ -1616,7 +1657,7 @@
         updatePrivateNetUI();
     }
 
-    // ── SVG Arc Path (same approach as AS diversity donut) ──
+    // ── SVG Arc Path (same approach as AS distribution donut) ──
 
     function pnDescribeArc(cx, cy, outerR, innerR, startAngle, endAngle) {
         const sweep = endAngle - startAngle;
@@ -1926,7 +1967,7 @@
         const backBtn = document.getElementById('pn-detail-back');
         if (backBtn) backBtn.classList.remove('hidden');
 
-        const ASD = window.ASDiversity;
+        const ASD = window.ASDistribution;
         const rawPeers = ASD ? ASD.getLastPeersRaw() : lastPeers;
         const netPeers = rawPeers.filter(p => p.network === net);
         const netLabel = PN_NET_LABELS[net] || net.toUpperCase();
@@ -2066,7 +2107,7 @@
         const backBtn = document.getElementById('pn-detail-back');
         if (backBtn) backBtn.classList.add('hidden');
 
-        const ASD = window.ASDiversity;
+        const ASD = window.ASDistribution;
         const rawPeers = ASD ? ASD.getLastPeersRaw() : lastPeers;
         const allPrivate = rawPeers.filter(p => PRIVATE_NETS.has(p.network));
 
@@ -2295,7 +2336,7 @@
 
     }
 
-    // ── Sub-Tooltip System (cascading from the panel, like AS diversity) ──
+    // ── Sub-Tooltip System (cascading from the panel, like AS distribution) ──
 
     /** Safely parse peer IDs from a row's data attribute */
     function parsePnPeerIds(rowEl) {
@@ -2568,11 +2609,10 @@
         // Service flag expansion for services category
         if (category === 'services' && label && label !== '\u2014') {
             html += '<div class="as-sub-tt-section">';
-            const SERVICE_FLAGS = { 'N': 'NETWORK', 'BF': 'BLOOM', 'W': 'WITNESS', 'CF': 'COMPACT_FILTERS', 'NL': 'NETWORK_LIMITED', 'P': 'P2P_V2' };
             const parts = label.split(/[\s\/]+/);
             for (const p of parts) {
-                const full = SERVICE_FLAGS[p.trim()];
-                if (full) html += '<div class="as-sub-tt-flag">' + p.trim() + ' = ' + full + '</div>';
+                const flag = serviceFlagFromAbbr(p.trim());
+                if (flag) html += '<div class="as-sub-tt-flag">' + pnEsc(p.trim()) + ' = ' + pnEsc(serviceFlagDescription(flag)) + '</div>';
             }
             html += '</div>';
         }
@@ -2846,36 +2886,57 @@
         renderPeerTable();
     }
 
-    function fitDonutStackToViewport() {
-        const container = document.getElementById('as-diversity-container');
+    function applyDonutStackFitScale(container, scale, immediate) {
+        if (!immediate) {
+            container.style.setProperty('--as-donut-fit-scale', scale);
+            return;
+        }
+
+        const previousTransition = container.style.transition;
+        container.style.transition = 'none';
+        container.style.setProperty('--as-donut-fit-scale', scale);
+        container.offsetHeight;
+        requestAnimationFrame(() => {
+            container.style.transition = previousTransition;
+        });
+    }
+
+    function fitDonutStackForPanelTop(panelTop, immediate) {
+        const container = document.getElementById('as-distribution-container');
         if (!container) return;
 
         if (privateNetMode || document.body.classList.contains('donut-focused')) {
-            container.style.setProperty('--as-donut-fit-scale', '1');
+            applyDonutStackFitScale(container, '1', immediate);
             return;
         }
 
-        const panel = document.getElementById('peer-panel');
-        if (!panel || panel.classList.contains('collapsed')) {
-            container.style.setProperty('--as-donut-fit-scale', '1');
-            return;
-        }
-
-        const panelRect = panel.getBoundingClientRect();
         const containerRect = container.getBoundingClientRect();
         const unscaledHeight = container.offsetHeight || containerRect.height;
         const top = parseFloat(getComputedStyle(container).top) || containerRect.top;
-        const availableHeight = panelRect.top - top - 12;
+        const availableHeight = panelTop - top - 18;
 
-        const minScale = 0.5;
+        const minScale = 0.45;
 
         if (unscaledHeight <= 0 || availableHeight <= 0) {
-            container.style.setProperty('--as-donut-fit-scale', String(minScale));
+            applyDonutStackFitScale(container, String(minScale), immediate);
             return;
         }
 
         const nextScale = Math.max(minScale, Math.min(1, availableHeight / unscaledHeight));
-        container.style.setProperty('--as-donut-fit-scale', nextScale.toFixed(3));
+        applyDonutStackFitScale(container, nextScale.toFixed(3), immediate);
+    }
+
+    function fitDonutStackToViewport() {
+        const container = document.getElementById('as-distribution-container');
+        if (!container) return;
+
+        const panel = document.getElementById('peer-panel');
+        if (!panel || panel.classList.contains('collapsed')) {
+            applyDonutStackFitScale(container, '1', false);
+            return;
+        }
+
+        fitDonutStackForPanelTop(panel.getBoundingClientRect().top, false);
     }
 
     function scheduleDonutStackFit() {
@@ -2925,12 +2986,15 @@
             if (counts[net] > 0) segs.push({ net, count: counts[net], color: getPnNetColor(net) });
         }
 
-        const cx = 80, cy = 80, outerR = 72, innerR = 54;
+        const cx = PN_DONUT_SIZE / 2;
+        const cy = PN_DONUT_SIZE / 2;
+        const outerR = PN_DONUT_RADIUS;
+        const innerR = PN_INNER_RADIUS;
         let html = '';
         if (segs.length === 1) {
             html += '<circle cx="' + cx + '" cy="' + cy + '" r="' + ((outerR + innerR) / 2) + '" fill="none" stroke="' + segs[0].color + '" stroke-width="' + (outerR - innerR) + '" class="pn-mini-segment" data-net="' + segs[0].net + '" style="cursor:pointer" />';
         } else if (segs.length > 1) {
-            const gap = 0.04;
+            const gap = 0.03;
             const totalGap = gap * segs.length;
             const totalAngle = 2 * Math.PI - totalGap;
             let angle = -Math.PI / 2;
@@ -3411,20 +3475,7 @@
 
         const nowSec = Math.floor(Date.now() / 1000);
 
-        // Expand service flags
-        function expandSvc(abbrev) {
-            if (!abbrev || abbrev === '\u2014') return '\u2014';
-            const SERVICE_MAP = {
-                'N': 'NETWORK', 'B': 'BLOOM', 'W': 'WITNESS', 'CF': 'COMPACT_FILTERS',
-                'NL': 'NETWORK_LIMITED', 'P': 'P2P_V2',
-            };
-            return abbrev.split(/\s+/).map(f => {
-                const t = f.trim();
-                return SERVICE_MAP[t] || t;
-            }).join('<br>');
-        }
-
-        // Build popup HTML — same structure as AS diversity peer-detail-popup
+        // Build popup HTML — same structure as AS distribution peer-detail-popup
         let html = '';
         html += `<div class="peer-popup-badge" style="border-color:${netColor};color:${netColor}">${netLabel}</div>`;
         html += '<div class="peer-popup-header">';
@@ -3469,7 +3520,7 @@
         html += '<div class="peer-popup-section-title">Software</div>';
         html += pnDetailRow('Version', pnEsc(peer.subver || '\u2014'));
         html += pnDetailRow('Protocol', peer.version || '\u2014');
-        html += pnDetailRow('Services', expandSvc(peer.services_abbrev || ''));
+        html += pnDetailRow('Services', renderServiceFlagList(peer.services_abbrev || ''));
         html += pnDetailRow('Start Height', peer.startingheight || '\u2014');
         html += pnDetailRow('Synced Hdrs', peer.synced_headers || '\u2014');
         html += pnDetailRow('Synced Blks', peer.synced_blocks || '\u2014');
@@ -3986,9 +4037,9 @@
             updateFlightDeck(nodes);
             updateHUD();
 
-            // [AS-DIVERSITY] Update AS Diversity donut with latest peer data (always active)
-            if (window.ASDiversity) {
-                window.ASDiversity.update(lastPeers);
+            // [AS-DISTRIBUTION] Update AS Distribution donut with latest peer data (always active)
+            if (window.ASDistribution) {
+                window.ASDistribution.update(lastPeers);
             }
 
             // Refresh the peer table panel
@@ -5052,7 +5103,7 @@
         // (but always draw fading-out nodes so they dissolve gracefully)
         if (!passesNetFilter(node.net) && node.alive) return;
 
-        // [AS-DIVERSITY] Dim peers not in the selected AS
+        // [AS-DISTRIBUTION] Dim peers not in the selected AS
         let asDimFactor = 1;
         if (asFilterPeerIds && node.alive && !asFilterPeerIds.has(node.peerId)) {
             asDimFactor = 0.15;
@@ -5109,7 +5160,7 @@
         const r = CFG.nodeRadius * scale;
         const gr = CFG.glowRadius * scale * pulse;
 
-        // [AS-DIVERSITY] Apply dim factor to opacity
+        // [AS-DISTRIBUTION] Apply dim factor to opacity
         const finalOpacity = opacity * asDimFactor;
 
         // Draw at each wrap offset
@@ -5164,7 +5215,7 @@
     }
 
     // ═══════════════════════════════════════════════════════════
-    // [AS-DIVERSITY] Resolve which wrap copy of each peer to draw lines to.
+    // [AS-DISTRIBUTION] Resolve which wrap copy of each peer to draw lines to.
     // Prefers the copy visible on the current map view, breaking ties by
     // proximity to viewport center.  Falls back to closest-to-center among
     // all wrap copies when nothing is on-screen.
@@ -5229,14 +5280,14 @@
     }
 
     // ═══════════════════════════════════════════════════════════
-    // [AS-DIVERSITY] Draw lines from LEGEND DOT to peers of a hovered/selected AS
+    // [AS-DISTRIBUTION] Draw lines from LEGEND DOT to peers of a hovered/selected AS
     // Lines always originate from the legend dot, never the donut center.
     // Adapts to map pan/zoom since this runs every frame.
     // ═══════════════════════════════════════════════════════════
 
     function drawAsLines(wrapOffsets) {
         if (!asLinePeerIds || !asLineColor) return;
-        const ASD = window.ASDiversity;
+        const ASD = window.ASDistribution;
         if (!ASD) return;
 
         // Lines originate from legend dots (top-8 direct, Others for non-top-8, donut center fallback)
@@ -5332,7 +5383,7 @@
      *  Each group draws from its own legend dot in its own color. */
     function drawAsLinesAll(wrapOffsets) {
         if (!asLineGroups || asLineGroups.length === 0) return;
-        const ASD = window.ASDiversity;
+        const ASD = window.ASDistribution;
         if (!ASD) return;
 
         const canvasRect = canvas.getBoundingClientRect();
@@ -5671,8 +5722,8 @@
                     renderPeerTable();
                     hideTooltip(); // close the group list tooltip
 
-                    // [AS-DIVERSITY] Open full peer detail FIRST (before zoom)
-                    const ASD = window.ASDiversity;
+                    // [AS-DISTRIBUTION] Open full peer detail FIRST (before zoom)
+                    const ASD = window.ASDistribution;
                     if (ASD) {
                         const rawPeers = ASD.getLastPeersRaw();
                         const peerData = rawPeers.find(p => p.id === peerId);
@@ -6023,7 +6074,7 @@
     // Panel toggle (clicking the title bar)
     document.getElementById('peer-panel-handle').addEventListener('click', () => {
         panelEl.classList.toggle('collapsed');
-        // [AS-DIVERSITY] When expanding peer list, bring it on top of AS panel
+        // [AS-DISTRIBUTION] When expanding peer list, bring it on top of AS panel
         if (!panelEl.classList.contains('collapsed')) {
             document.body.classList.add('panel-focus-peers');
             document.body.classList.remove('panel-focus-as');
@@ -6031,7 +6082,7 @@
         scheduleDonutStackFit();
     });
 
-    // [AS-DIVERSITY] Clicking anywhere in peer panel body → bring peers to front
+    // [AS-DISTRIBUTION] Clicking anywhere in peer panel body → bring peers to front
     const peerPanelBody = document.querySelector('.peer-panel-body');
     if (peerPanelBody) {
         peerPanelBody.addEventListener('click', () => {
@@ -6200,7 +6251,7 @@
                 sorted = sorted.filter(p => passesNetFilter(p.network || 'ipv4'));
             }
 
-            // [AS-DIVERSITY] Apply AS filter when an AS is selected
+            // [AS-DISTRIBUTION] Apply AS filter when an AS is selected
             if (asFilterPeerIds) {
                 sorted = sorted.filter(p => asFilterPeerIds.has(p.id));
             }
@@ -6805,8 +6856,8 @@
             mapFilterPeerIds = new Set([node.peerId]);
             renderPeerTable();
 
-            // [AS-DIVERSITY] Open full peer detail in right panel + animate donut
-            const ASD = window.ASDiversity;
+            // [AS-DISTRIBUTION] Open full peer detail in right panel + animate donut
+            const ASD = window.ASDistribution;
             let bigPopupOpened = false;
             if (ASD) {
                 const rawPeers = ASD.getLastPeersRaw();
@@ -7145,7 +7196,7 @@
             drawConnectionLines(now, wrapOffsets);
         }
 
-        // [AS-DIVERSITY] 9b. Draw lines from map center to AS peers (hover/selection)
+        // [AS-DISTRIBUTION] 9b. Draw lines from map center to AS peers (hover/selection)
         if (!privateNetMode) {
             if (asLineGroups && asLineGroups.length > 0) {
                 drawAsLinesAll(wrapOffsets);
@@ -7309,7 +7360,7 @@
                 if (group.length === 1) {
                     const node = group[0];
                     // If clicking the same peer that's already shown in detail, close popup instead
-                    const ASD = window.ASDiversity;
+                    const ASD = window.ASDistribution;
                     if (pinnedNode && pinnedNode.peerId === node.peerId && ASD && ASD.isPeerDetailActive()) {
                         pinnedNode = null;
                         highlightedPeerId = null;
@@ -7327,7 +7378,7 @@
                         mapFilterPeerIds = new Set([node.peerId]);
                         renderPeerTable();
 
-                        // [AS-DIVERSITY] Open full peer detail in right panel FIRST
+                        // [AS-DISTRIBUTION] Open full peer detail in right panel FIRST
                         if (ASD) {
                             const rawPeers = ASD.getLastPeersRaw();
                             const peerData = rawPeers.find(p => p.id === node.peerId);
@@ -7370,8 +7421,8 @@
                 } else {
                     // Multi-peer dot: show small pinned selection list near the dot
                     // Close any existing peer detail popup first
-                    if (window.ASDiversity) {
-                        window.ASDiversity.closePeerPopup();
+                    if (window.ASDistribution) {
+                        window.ASDistribution.closePeerPopup();
                     }
                     pinnedNode = null;  // no single peer pinned yet
                     groupedNodes = group;
@@ -7415,9 +7466,9 @@
                         renderPnDonut();
                     }
                 }
-                // [AS-DIVERSITY] Two-stage collapse: first close sub-panels, then main panel
-                if (window.ASDiversity) {
-                    window.ASDiversity.onMapClick();
+                // [AS-DISTRIBUTION] Two-stage collapse: first close sub-panels, then main panel
+                if (window.ASDistribution) {
+                    window.ASDistribution.onMapClick();
                 }
             }
         }
@@ -7698,7 +7749,7 @@
 
         // Visibility toggle items — the sections on the map
         const visItems = [
-            { id: 'as-diversity-container', label: 'Public Donut', visible: true },
+            { id: 'as-distribution-container', label: 'Public Donut', visible: true },
             { id: 'pn-mini-donut', label: 'Private Donut', visible: true },
             { id: 'btc-price-bar', label: 'Bitcoin Price', visible: true },
             { id: 'map-overlay', label: 'System Stats', visible: true },
@@ -7790,8 +7841,8 @@
                 } else {
                     target.style.display = 'none';
                     // If hiding public donut, deselect any active AS
-                    if (targetId === 'as-diversity-container' && window.ASDiversity && window.ASDiversity.getSelectedAs()) {
-                        window.ASDiversity.deselect();
+                    if (targetId === 'as-distribution-container' && window.ASDistribution && window.ASDistribution.getSelectedAs()) {
+                        window.ASDistribution.deselect();
                     }
                     // If hiding private donut, exit private mode if active
                     if (targetId === 'pn-mini-donut' && privateNetMode) {
@@ -7807,8 +7858,8 @@
             donutLegendsInput.addEventListener('change', () => {
                 advSettings.showDonutLegends = donutLegendsInput.checked;
                 saveAdvSettings();
-                // Toggle legend visibility class on the AS diversity container
-                const asCont = document.getElementById('as-diversity-container');
+                // Toggle legend visibility class on the AS distribution container
+                const asCont = document.getElementById('as-distribution-container');
                 if (asCont) {
                     if (advSettings.showDonutLegends) {
                         asCont.classList.remove('legends-hidden');
@@ -7821,9 +7872,9 @@
                 if (pnMiniLegend) {
                     pnMiniLegend.style.display = advSettings.showDonutLegends ? '' : 'none';
                 }
-                // Notify AS diversity module of the legend visibility state
-                if (window.ASDiversity && window.ASDiversity.setLegendsHidden) {
-                    window.ASDiversity.setLegendsHidden(!advSettings.showDonutLegends);
+                // Notify AS distribution module of the legend visibility state
+                if (window.ASDistribution && window.ASDistribution.setLegendsHidden) {
+                    window.ASDistribution.setLegendsHidden(!advSettings.showDonutLegends);
                 }
             });
         }
@@ -7839,14 +7890,26 @@
     function applyMaxPeerRows() {
         const panel = document.querySelector('.peer-panel');
         if (!panel) return;
+        let prefitForPanelGrowth = false;
         if (maxPeerRows > 0) {
             // handle(48) + thead(22) + rows * 22 + a tiny bit of padding
             const h = 48 + 22 + (maxPeerRows * 22) + 4;
+            const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+            const finalPanelTop = viewportHeight - h;
+            const currentPanelTop = panel.getBoundingClientRect().top;
             panel.style.maxHeight = h + 'px';
+            if (finalPanelTop < currentPanelTop) {
+                fitDonutStackForPanelTop(finalPanelTop, true);
+                prefitForPanelGrowth = true;
+            }
         } else {
             panel.style.maxHeight = '';
         }
-        scheduleDonutStackFit();
+        if (prefitForPanelGrowth) {
+            setTimeout(fitDonutStackToViewport, 520);
+        } else {
+            scheduleDonutStackFit();
+        }
     }
 
     function closeDisplaySettingsOnOutside(e) {
@@ -8274,8 +8337,8 @@
         h += '</div>'; // end theme-wrap
         h += '</div>'; // end theme-section
 
-        // ── Service Provider Diversity ──
-        h += '<div class="adv-section">Service Provider Diversity</div>';
+        // ── Service Provider Distribution ──
+        h += '<div class="adv-section">Service Provider Distribution</div>';
         h += advSliderHTML('adv-as-linewidth', 'Line Thickness', advSettings.asLineWidth, 0, 100, 1);
         h += advSliderHTML('adv-as-fan', 'Line Fanning', advSettings.asLineFan, 0, 100, 1);
 
@@ -8693,18 +8756,18 @@
     }
 
     // ═══════════════════════════════════════════════════════════
-    // [AS-DIVERSITY] — Module initialization (always-on, no toggle)
+    // [AS-DISTRIBUTION] — Module initialization (always-on, no toggle)
     // ═══════════════════════════════════════════════════════════
 
-    function initAsDiversity() {
-        if (!window.ASDiversity) return;
+    function initAsDistribution() {
+        if (!window.ASDistribution) return;
 
-        const ASD = window.ASDiversity;
+        const ASD = window.ASDistribution;
         ASD.init();
 
         // Apply initial "Display Top ISP/Net" toggle state
         if (!advSettings.showDonutLegends) {
-            const asCont = document.getElementById('as-diversity-container');
+            const asCont = document.getElementById('as-distribution-container');
             if (asCont) asCont.classList.add('legends-hidden');
             const pnMiniLegend = document.getElementById('pn-mini-legend');
             if (pnMiniLegend) pnMiniLegend.style.display = 'none';
@@ -8744,7 +8807,7 @@
                 const node = nodes.find(n => n.peerId === peerId && n.alive);
                 if (!node) return;
                 // Draw line from the peer's AS legend dot to this peer
-                const ASD = window.ASDiversity;
+                const ASD = window.ASDistribution;
                 if (ASD && node.peerId !== undefined) {
                     const peer = lastPeers.find(p => p.id === peerId);
                     if (peer && peer.as) {
@@ -8822,7 +8885,7 @@
     }
 
     // ═══════════════════════════════════════════════════════════
-    // [AS-DIVERSITY] Peer panel + topbar button wiring
+    // [AS-DISTRIBUTION] Peer panel + topbar button wiring
     // ═══════════════════════════════════════════════════════════
 
     function initNewButtons() {
@@ -9008,10 +9071,10 @@
         updateClock();
         setInterval(updateClock, 1000);
 
-        // [AS-DIVERSITY] Initialize AS Diversity module (always-on donut)
-        initAsDiversity();
+        // [AS-DISTRIBUTION] Initialize AS Distribution module (always-on donut)
+        initAsDistribution();
 
-        // [AS-DIVERSITY] Wire up new peer panel buttons and topbar gear
+        // [AS-DISTRIBUTION] Wire up new peer panel buttons and topbar gear
         initNewButtons();
 
         // Apply default visible row count to peer panel

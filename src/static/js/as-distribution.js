@@ -1,13 +1,13 @@
 /* ============================================================
-   AS Diversity Analysis — JavaScript Module
-   Isolated logic for the AS Diversity view.
+   AS Distribution Analysis — JavaScript Module
+   Isolated logic for the AS Distribution view.
    Delete this file to fully revert the feature.
 
-   Integration points in app.js are marked with [AS-DIVERSITY].
-   This module exposes window.ASDiversity for the main app to call.
+   Integration points in app.js are marked with [AS-DISTRIBUTION].
+   This module exposes window.ASDistribution for the main app to call.
    ============================================================ */
 
-window.ASDiversity = (function () {
+window.ASDistribution = (function () {
     'use strict';
 
     // ═══════════════════════════════════════════════════════════
@@ -45,7 +45,7 @@ window.ASDiversity = (function () {
     let hoveredAll = false;        // True when title or SUMMARY ANALYSIS is hovered
     let summarySelected = false;   // True when Summary Analysis panel is open
     let selectedAs = null;         // AS number string currently selected (clicked)
-    let diversityScore = 0;        // 0-10 score
+    let distributionScore = 0;        // 0-10 score
     let totalPeers = 0;
     let hasRenderedOnce = false;   // Track if we've ever rendered data
     let legendFocusAs = null;      // AS number to exclusively show in legend during panel hover
@@ -113,13 +113,17 @@ window.ASDiversity = (function () {
 
     // Service flag definitions (mirrored from app.js for hover expansion)
     var SERVICE_FLAGS = {
-        'NETWORK':          { abbr: 'N',  desc: 'Full chain history (NODE_NETWORK)' },
-        'WITNESS':          { abbr: 'W',  desc: 'Segregated Witness support (NODE_WITNESS)' },
-        'NETWORK_LIMITED':  { abbr: 'NL', desc: 'Limited chain history, last 288 blocks (NODE_NETWORK_LIMITED)' },
-        'P2P_V2':           { abbr: 'P',  desc: 'BIP324 v2 encrypted transport (P2P_V2)' },
-        'COMPACT_FILTERS':  { abbr: 'CF', desc: 'BIP157/158 compact block filters (NODE_COMPACT_FILTERS)' },
-        'BLOOM':            { abbr: 'B',  desc: 'BIP37 Bloom filter support (NODE_BLOOM)' },
+        'NETWORK':          { abbr: 'N',  label: 'Full chain history', rpc: 'NODE_NETWORK' },
+        'WITNESS':          { abbr: 'W',  label: 'Segregated Witness', rpc: 'NODE_WITNESS' },
+        'NETWORK_LIMITED':  { abbr: 'NL', label: 'Limited chain history', rpc: 'NODE_NETWORK_LIMITED' },
+        'P2P_V2':           { abbr: 'P',  label: 'BIP324 v2 transport', rpc: 'P2P_V2' },
+        'COMPACT_FILTERS':  { abbr: 'CF', label: 'Compact block filters', rpc: 'NODE_COMPACT_FILTERS' },
+        'BLOOM':            { abbr: 'B',  label: 'Bloom filters', rpc: 'NODE_BLOOM' },
     };
+
+    function serviceFlagDescription(flag) {
+        return flag.rpc ? flag.label + ' (' + flag.rpc + ')' : flag.label;
+    }
 
     // Connection type short labels
     var CONN_TYPE_LABELS = {
@@ -362,8 +366,8 @@ window.ASDiversity = (function () {
         return groups;
     }
 
-    /** Calculate Herfindahl-Hirschman diversity score (0-10) */
-    function calcDiversityScore(groups) {
+    /** Calculate Herfindahl-Hirschman distribution score (0-10) */
+    function calcDistributionScore(groups) {
         if (totalPeers === 0) return 0;
         var hhi = 0;
         for (var i = 0; i < groups.length; i++) {
@@ -742,8 +746,8 @@ window.ASDiversity = (function () {
     function computeSummaryData() {
         var peers = lastPeersRaw;
         return {
-            score: diversityScore,
-            quality: getQuality(diversityScore),
+            score: distributionScore,
+            quality: getQuality(distributionScore),
             uniqueProviders: asGroups.length,
             topProvider: asGroups.length > 0 ? asGroups[0] : null,
             insights: computeInsights(),
@@ -1269,7 +1273,7 @@ window.ASDiversity = (function () {
         if (donutCenter) donutCenter.style.opacity = '';
     }
 
-    /** Get quality rating for a diversity score */
+    /** Get quality rating for a distribution score */
     function getQuality(score) {
         if (score >= 8) return { word: 'Excellent', cls: 'q-excellent' };
         if (score >= 6) return { word: 'Good', cls: 'q-good' };
@@ -1281,13 +1285,13 @@ window.ASDiversity = (function () {
     /** Build score tooltip text */
     function buildScoreTooltip(score) {
         var q = getQuality(score);
-        return 'Diversity Score: ' + score.toFixed(1) + '/10 (' + q.word + ')\n'
+        return 'Distribution Score: ' + score.toFixed(1) + '/10 (' + q.word + ')\n'
              + 'Based on Herfindahl\u2013Hirschman Index (HHI)\n'
              + 'Higher = more evenly distributed peers across providers';
     }
 
     /** Update the donut center label.
-     *  Layout: DIVERSITY | SCORE: heading | big number | quality word
+     *  Layout: DISTRIBUTION | SCORE: heading | big number | quality word
      *  When AS selected: peer count heading | AS name | percentage */
     function renderCenter() {
         if (!donutCenter) return;
@@ -1326,12 +1330,12 @@ window.ASDiversity = (function () {
 
         // If a summary sub-filter is active (e.g. IPv4, IPv6), show category info in donut center
         if (donutFocused && summarySelected && subFilterPeerIds && subFilterLabel && !selectedAs) {
-            var diversityEl2 = donutCenter.querySelector('.as-score-diversity');
+            var distributionEl2 = donutCenter.querySelector('.as-score-distribution');
             var headingEl2 = donutCenter.querySelector('.as-score-heading');
             var scoreVal2 = donutCenter.querySelector('.as-score-value');
             var qualityEl2 = donutCenter.querySelector('.as-score-quality');
             var scoreLbl2 = donutCenter.querySelector('.as-score-label');
-            if (diversityEl2) diversityEl2.style.display = 'none';
+            if (distributionEl2) distributionEl2.style.display = 'none';
             if (headingEl2) {
                 headingEl2.textContent = subFilterPeerIds.length + ' PEER' + (subFilterPeerIds.length !== 1 ? 'S' : '');
                 headingEl2.style.color = 'var(--accent)';
@@ -1365,12 +1369,12 @@ window.ASDiversity = (function () {
         if (donutFocused && activeNetworkPanel && !selectedAs) {
             // If a sub-filter is active within the network panel, show that category
             if (subFilterPeerIds && subFilterLabel) {
-                var diversityEl2 = donutCenter.querySelector('.as-score-diversity');
+                var distributionEl2 = donutCenter.querySelector('.as-score-distribution');
                 var headingEl2 = donutCenter.querySelector('.as-score-heading');
                 var scoreVal2 = donutCenter.querySelector('.as-score-value');
                 var qualityEl2 = donutCenter.querySelector('.as-score-quality');
                 var scoreLbl2 = donutCenter.querySelector('.as-score-label');
-                if (diversityEl2) diversityEl2.style.display = 'none';
+                if (distributionEl2) distributionEl2.style.display = 'none';
                 if (headingEl2) {
                     headingEl2.textContent = subFilterPeerIds.length + ' PEER' + (subFilterPeerIds.length !== 1 ? 'S' : '');
                     headingEl2.style.color = 'var(--accent)';
@@ -1400,12 +1404,12 @@ window.ASDiversity = (function () {
             var npNetPeers = lastPeersRaw.filter(function (p) {
                 return (p.network || 'ipv4') === npNetKey;
             });
-            var diversityEl3 = donutCenter.querySelector('.as-score-diversity');
+            var distributionEl3 = donutCenter.querySelector('.as-score-distribution');
             var headingEl3 = donutCenter.querySelector('.as-score-heading');
             var scoreVal3 = donutCenter.querySelector('.as-score-value');
             var qualityEl3 = donutCenter.querySelector('.as-score-quality');
             var scoreLbl3 = donutCenter.querySelector('.as-score-label');
-            if (diversityEl3) diversityEl3.style.display = 'none';
+            if (distributionEl3) distributionEl3.style.display = 'none';
             if (headingEl3) {
                 headingEl3.textContent = npNetPeers.length + ' PEER' + (npNetPeers.length !== 1 ? 'S' : '');
                 headingEl3.style.color = 'var(--accent)';
@@ -1429,7 +1433,7 @@ window.ASDiversity = (function () {
             return;
         }
 
-        var diversityEl = donutCenter.querySelector('.as-score-diversity');
+        var distributionEl = donutCenter.querySelector('.as-score-distribution');
         var headingEl = donutCenter.querySelector('.as-score-heading');
         var scoreVal = donutCenter.querySelector('.as-score-value');
         var qualityEl = donutCenter.querySelector('.as-score-quality');
@@ -1461,15 +1465,15 @@ window.ASDiversity = (function () {
 
                 // Show "← Others" back link for sub-providers, else "ISP" label
                 var isSubProv = isOthersSubProvider(selectedAs);
-                if (diversityEl) {
+                if (distributionEl) {
                     if (isSubProv && donutFocused) {
-                        diversityEl.innerHTML = '<span class="as-others-back-link">\u2190 Others</span>';
-                        diversityEl.style.color = '';
+                        distributionEl.innerHTML = '<span class="as-others-back-link">\u2190 Others</span>';
+                        distributionEl.style.color = '';
                     } else {
-                        diversityEl.textContent = seg.isOthers ? 'Bucket:' : 'ISP';
-                        diversityEl.style.color = 'var(--logo-primary)';
+                        distributionEl.textContent = seg.isOthers ? 'Bucket:' : 'ISP';
+                        distributionEl.style.color = 'var(--logo-primary)';
                     }
-                    diversityEl.style.display = '';
+                    distributionEl.style.display = '';
                 }
                 // Hide the heading row — peer count moves to bottom label
                 if (headingEl) {
@@ -1500,10 +1504,10 @@ window.ASDiversity = (function () {
         // Reset any selected-mode / provider styling
         scoreVal.className = 'as-score-value';
         scoreVal.style.color = '';
-        if (diversityEl) {
-            diversityEl.textContent = 'DIVERSITY';
-            diversityEl.style.display = '';
-            diversityEl.style.color = '';
+        if (distributionEl) {
+            distributionEl.textContent = 'DISTRIBUTION';
+            distributionEl.style.display = '';
+            distributionEl.style.color = '';
         }
         if (headingEl) {
             headingEl.style.color = '';
@@ -1519,7 +1523,7 @@ window.ASDiversity = (function () {
 
         // Edge case: no locatable peers (all private/tor/i2p/cjdns)
         if (totalPeers === 0) {
-            if (diversityEl) diversityEl.style.display = 'none';
+            if (distributionEl) distributionEl.style.display = 'none';
             if (headingEl) headingEl.textContent = '';
             if (qualityEl) {
                 qualityEl.textContent = '';
@@ -1532,22 +1536,22 @@ window.ASDiversity = (function () {
             return;
         }
 
-        // Normal: show diversity score
-        var q = getQuality(diversityScore);
+        // Normal: show distribution score
+        var q = getQuality(distributionScore);
 
         if (headingEl) {
             headingEl.textContent = 'SCORE:';
         }
 
-        scoreVal.textContent = diversityScore.toFixed(1);
-        scoreVal.title = buildScoreTooltip(diversityScore);
+        scoreVal.textContent = distributionScore.toFixed(1);
+        scoreVal.title = buildScoreTooltip(distributionScore);
 
         // Remove old score classes and add new
         scoreVal.classList.remove('as-score-excellent', 'as-score-good', 'as-score-moderate', 'as-score-poor', 'as-score-critical');
-        if (diversityScore >= 8) scoreVal.classList.add('as-score-excellent');
-        else if (diversityScore >= 6) scoreVal.classList.add('as-score-good');
-        else if (diversityScore >= 4) scoreVal.classList.add('as-score-moderate');
-        else if (diversityScore >= 2) scoreVal.classList.add('as-score-poor');
+        if (distributionScore >= 8) scoreVal.classList.add('as-score-excellent');
+        else if (distributionScore >= 6) scoreVal.classList.add('as-score-good');
+        else if (distributionScore >= 4) scoreVal.classList.add('as-score-moderate');
+        else if (distributionScore >= 2) scoreVal.classList.add('as-score-poor');
         else scoreVal.classList.add('as-score-critical');
 
         if (qualityEl) {
@@ -1555,7 +1559,7 @@ window.ASDiversity = (function () {
             qualityEl.className = 'as-score-quality ' + q.cls;
         }
 
-        // Label just shows quality word below - no "DIVERSITY SUMMARY" text needed
+        // Label just shows quality word below - no "DISTRIBUTION SUMMARY" text needed
         scoreLbl.textContent = '';
         scoreLbl.classList.remove('as-summary-link');
         scoreLbl.classList.remove('as-summary-active');
@@ -1910,7 +1914,7 @@ window.ASDiversity = (function () {
         var riskEl = panelEl.querySelector('.as-detail-risk');
 
         if (asnEl) {
-            asnEl.innerHTML = '<span style="color:var(--logo-primary, #4a90d9)">PEER ISP</span><br><span style="color:var(--logo-accent, #7ec8e3)">DIVERSITY</span> <span style="color:var(--logo-primary, #4a90d9)">SUMMARY</span>';
+            asnEl.innerHTML = '<span style="color:var(--logo-primary, #4a90d9)">PEER ISP</span><br><span style="color:var(--logo-accent, #7ec8e3)">DISTRIBUTION</span> <span style="color:var(--logo-primary, #4a90d9)">SUMMARY</span>';
             asnEl.classList.add('as-summary-title');
         }
         // Clickable provider count in header (no peer count)
@@ -1923,7 +1927,7 @@ window.ASDiversity = (function () {
             metaEl.innerHTML = '<span class="as-detail-type-badge">' + data.quality.word + '</span>';
         }
 
-        // Score bar (diversity score 0-10 → percentage 0-100)
+        // Score bar (distribution score 0-10 → percentage 0-100)
         var scorePct = (data.score / 10) * 100;
         var scoreTooltip = buildScoreTooltip(data.score);
         if (barFill) {
@@ -1943,9 +1947,9 @@ window.ASDiversity = (function () {
         var html = '';
 
         // ── Section 1: Score + Insights ──
-        html += '<div class="modal-section-title" title="Diversity score based on Herfindahl\u2013Hirschman Index (HHI). Higher score = more evenly distributed peers across providers.">Score &amp; Insights</div>';
-        html += '<div class="modal-row"><span class="modal-label" title="' + scoreTooltip.replace(/"/g, '&quot;') + '">Diversity Score</span><span class="modal-val">' + data.score.toFixed(1) + ' / 10</span></div>';
-        html += '<div class="modal-row"><span class="modal-label" title="Quality rating based on the diversity score">Quality</span><span class="modal-val">' + data.quality.word + '</span></div>';
+        html += '<div class="modal-section-title" title="Distribution score based on Herfindahl\u2013Hirschman Index (HHI). Higher score = more evenly distributed peers across providers.">Score &amp; Insights</div>';
+        html += '<div class="modal-row"><span class="modal-label" title="' + scoreTooltip.replace(/"/g, '&quot;') + '">Distribution Score</span><span class="modal-val">' + data.score.toFixed(1) + ' / 10</span></div>';
+        html += '<div class="modal-row"><span class="modal-label" title="Quality rating based on the distribution score">Quality</span><span class="modal-val">' + data.quality.word + '</span></div>';
         html += '<div class="modal-row"><span class="modal-label" title="Number of distinct Autonomous Systems (AS/ISPs) your peers connect through">Unique Providers</span>'
              + '<span class="modal-val as-panel-link as-all-providers-link" title="View all providers">' + data.uniqueProviders + '</span></div>';
         if (data.topProvider) {
@@ -2140,12 +2144,12 @@ window.ASDiversity = (function () {
                 var found = false;
                 for (var fk in SERVICE_FLAGS) {
                     if (SERVICE_FLAGS.hasOwnProperty(fk) && SERVICE_FLAGS[fk].abbr === abbrs[ai]) {
-                        html += '<div class="as-sub-tt-flag">' + abbrs[ai] + ' = ' + SERVICE_FLAGS[fk].desc + '</div>';
+                        html += '<div class="as-sub-tt-flag">' + escHtml(abbrs[ai]) + ' = ' + escHtml(serviceFlagDescription(SERVICE_FLAGS[fk])) + '</div>';
                         found = true;
                         break;
                     }
                 }
-                if (!found) html += '<div class="as-sub-tt-flag">' + abbrs[ai] + '</div>';
+                if (!found) html += '<div class="as-sub-tt-flag">' + escHtml(abbrs[ai]) + '</div>';
             }
             html += '</div>';
         }
@@ -2592,7 +2596,7 @@ window.ASDiversity = (function () {
             for (var ai = 0; ai < abbrs.length; ai++) {
                 for (var fk in SERVICE_FLAGS) {
                     if (SERVICE_FLAGS.hasOwnProperty(fk) && SERVICE_FLAGS[fk].abbr === abbrs[ai]) {
-                        html += '<div class="as-sub-tt-flag" style="font-size:10px; color:var(--text-secondary)">' + abbrs[ai] + ' = ' + SERVICE_FLAGS[fk].desc + '</div>';
+                        html += '<div class="as-sub-tt-flag" style="font-size:10px; color:var(--text-secondary)">' + escHtml(abbrs[ai]) + ' = ' + escHtml(serviceFlagDescription(SERVICE_FLAGS[fk])) + '</div>';
                         break;
                     }
                 }
@@ -2668,7 +2672,7 @@ window.ASDiversity = (function () {
 
     /** Restore the donut visual state after a hover preview ends.
      *  Checks for active sub-filters, insights, or selections and restores appropriately
-     *  instead of blindly reverting to the default diversity score display. */
+     *  instead of blindly reverting to the default distribution score display. */
     function restoreDonutAfterPreview() {
         summaryPreviewPeerIds = null;
         summaryPreviewLabel = null;
@@ -2742,13 +2746,13 @@ window.ASDiversity = (function () {
         if (!donutFocused || !donutCenter) return;
         summaryPreviewPeerIds = peerIds;
         summaryPreviewLabel = label;
-        var diversityEl = donutCenter.querySelector('.as-score-diversity');
+        var distributionEl = donutCenter.querySelector('.as-score-distribution');
         var headingEl = donutCenter.querySelector('.as-score-heading');
         var scoreVal = donutCenter.querySelector('.as-score-value');
         var qualityEl = donutCenter.querySelector('.as-score-quality');
         var scoreLbl = donutCenter.querySelector('.as-score-label');
 
-        if (diversityEl) { diversityEl.style.display = 'none'; }
+        if (distributionEl) { distributionEl.style.display = 'none'; }
         if (headingEl) {
             headingEl.textContent = peerIds.length + ' PEER' + (peerIds.length !== 1 ? 'S' : '');
             headingEl.style.color = 'var(--accent)';
@@ -4419,7 +4423,7 @@ window.ASDiversity = (function () {
         if (_resetMapZoom) _resetMapZoom();
     }
 
-    /** Navigate back — always returns to diversity summary */
+    /** Navigate back — always returns to distribution summary */
     function navigateBack() {
         // Close any open map peer tooltip when navigating back
         if (_hideMapTooltip) _hideMapTooltip();
@@ -4427,7 +4431,7 @@ window.ASDiversity = (function () {
         // Close Others popup if open
         if (othersListOpen) closeOthersListInDonut();
 
-        // Always go back to diversity summary (clear all state)
+        // Always go back to distribution summary (clear all state)
         activeNetworkPanel = null;
         peerDetailActive = false;
         selectedAs = null;
@@ -4803,7 +4807,7 @@ window.ASDiversity = (function () {
         }
         if (!seg) return;
 
-        var diversityEl = donutCenter.querySelector('.as-score-diversity');
+        var distributionEl = donutCenter.querySelector('.as-score-distribution');
         var headingEl = donutCenter.querySelector('.as-score-heading');
         var scoreVal = donutCenter.querySelector('.as-score-value');
         var qualityEl = donutCenter.querySelector('.as-score-quality');
@@ -4811,15 +4815,15 @@ window.ASDiversity = (function () {
 
         // Show "← Others" back link for sub-providers, else "ISP" label
         var isSubProv = isOthersSubProvider(asNum);
-        if (diversityEl) {
+        if (distributionEl) {
             if (isSubProv) {
-                diversityEl.innerHTML = '<span class="as-others-back-link">\u2190 Others</span>';
-                diversityEl.style.color = '';
+                distributionEl.innerHTML = '<span class="as-others-back-link">\u2190 Others</span>';
+                distributionEl.style.color = '';
             } else {
-                diversityEl.textContent = seg.isOthers ? 'Bucket:' : 'ISP';
-                diversityEl.style.color = 'var(--logo-primary)';
+                distributionEl.textContent = seg.isOthers ? 'Bucket:' : 'ISP';
+                distributionEl.style.color = 'var(--logo-primary)';
             }
-            diversityEl.style.display = '';
+            distributionEl.style.display = '';
         }
 
         // Hide the heading row — peer count moves to bottom label
@@ -4871,21 +4875,21 @@ window.ASDiversity = (function () {
             }
         }
 
-        var diversityEl = donutCenter.querySelector('.as-score-diversity');
+        var distributionEl = donutCenter.querySelector('.as-score-distribution');
         var headingEl = donutCenter.querySelector('.as-score-heading');
         var scoreVal = donutCenter.querySelector('.as-score-value');
         var qualityEl = donutCenter.querySelector('.as-score-quality');
         var scoreLbl = donutCenter.querySelector('.as-score-label');
 
         // Top line: "Rank #N" or "Bucket:" for Others
-        if (diversityEl) {
+        if (distributionEl) {
             if (seg.isOthers) {
-                diversityEl.textContent = 'Bucket:';
+                distributionEl.textContent = 'Bucket:';
             } else {
-                diversityEl.textContent = 'Rank #' + rank;
+                distributionEl.textContent = 'Rank #' + rank;
             }
-            diversityEl.style.color = '#d4a017';
-            diversityEl.style.display = '';
+            distributionEl.style.color = '#d4a017';
+            distributionEl.style.display = '';
         }
 
         // Second line: "ISP" label
@@ -5786,7 +5790,7 @@ window.ASDiversity = (function () {
         html += '<div class="peer-popup-section-title">Software</div>';
         html += peerDetailRow('Version', peer.subver || '\u2014');
         html += peerDetailRow('Protocol', peer.version || '\u2014');
-        html += peerDetailRow('Services', expandServiceFlags(peer.services_abbrev || ''));
+        html += peerDetailRow('Services', renderServiceFlagList(peer.services_abbrev || ''), true);
         html += peerDetailRow('Start Height', peer.startingheight || '\u2014');
         html += peerDetailRow('Synced Hdrs', peer.synced_headers || '\u2014');
         html += peerDetailRow('Synced Blks', peer.synced_blocks || '\u2014');
@@ -6010,13 +6014,13 @@ window.ASDiversity = (function () {
     /** Show peer ID and provider in donut center */
     function showPeerInDonutCenter(peer, color) {
         if (!donutCenter) return;
-        var diversityEl = donutCenter.querySelector('.as-score-diversity');
+        var distributionEl = donutCenter.querySelector('.as-score-distribution');
         var headingEl = donutCenter.querySelector('.as-score-heading');
         var scoreVal = donutCenter.querySelector('.as-score-value');
         var qualityEl = donutCenter.querySelector('.as-score-quality');
         var scoreLbl = donutCenter.querySelector('.as-score-label');
 
-        if (diversityEl) diversityEl.style.display = 'none';
+        if (distributionEl) distributionEl.style.display = 'none';
         if (headingEl) {
             headingEl.textContent = 'PEER #' + peer.id;
             headingEl.style.color = color;
@@ -6051,24 +6055,35 @@ window.ASDiversity = (function () {
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    /** Expand service flag abbreviations to full descriptions */
-    function expandServiceFlags(abbrev) {
+    function serviceFlagFromAbbr(abbr) {
+        for (var key in SERVICE_FLAGS) {
+            if (Object.prototype.hasOwnProperty.call(SERVICE_FLAGS, key) && SERVICE_FLAGS[key].abbr === abbr) {
+                return SERVICE_FLAGS[key];
+            }
+        }
+        return null;
+    }
+
+    /** Render service flag abbreviations as compact detail rows */
+    function renderServiceFlagList(abbrev) {
         if (!abbrev || abbrev === '\u2014') return '\u2014';
         var flags = abbrev.split(/\s+/);
-        var expanded = [];
+        var html = '<div class="service-flag-list">';
         for (var i = 0; i < flags.length; i++) {
             var flag = flags[i].trim();
-            var found = false;
-            for (var key in SERVICE_FLAGS) {
-                if (SERVICE_FLAGS[key].abbr === flag) {
-                    expanded.push(SERVICE_FLAGS[key].desc);
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) expanded.push(flag);
+            if (!flag) continue;
+            var details = serviceFlagFromAbbr(flag);
+            var label = details ? details.label : 'Unknown service flag';
+            var rpc = details ? details.rpc : flag;
+            var title = details ? serviceFlagDescription(details) : flag;
+            html += '<div class="service-flag-row" title="' + escHtml(title) + '">'
+                + '<span class="service-flag-abbr">' + escHtml(flag) + '</span>'
+                + '<span class="service-flag-label">' + escHtml(label) + '</span>'
+                + '<span class="service-flag-rpc">' + escHtml(rpc) + '</span>'
+                + '</div>';
         }
-        return expanded.join('<br>');
+        html += '</div>';
+        return html;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -6077,7 +6092,7 @@ window.ASDiversity = (function () {
 
     /** Initialize — cache DOM refs and attach events. Call once on page load. */
     function init() {
-        containerEl = document.getElementById('as-diversity-container');
+        containerEl = document.getElementById('as-distribution-container');
         titleEl = document.getElementById('as-donut-title');
         donutWrapEl = document.getElementById('as-donut-wrap');
         donutSvg = document.getElementById('as-donut');
@@ -6196,7 +6211,7 @@ window.ASDiversity = (function () {
         }
 
         asGroups = aggregatePeers(peers);
-        diversityScore = calcDiversityScore(asGroups);
+        distributionScore = calcDistributionScore(asGroups);
         donutSegments = buildDonutSegments(asGroups);
 
         // If peer detail popup is open, skip all visual re-rendering to preserve

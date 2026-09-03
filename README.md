@@ -248,4 +248,4 @@ docker build --build-arg BPM_BUILD_REVISION="$(git rev-parse HEAD)" \
 
 MIT License. See [LICENSE](LICENSE).
 
-inspired by [mbhillrn](https://github.com/mbhillrn).
+Inspired by [mbhillrn](https://github.com/mbhillrn), [Mirobit](https://github.com/Mirobit).
